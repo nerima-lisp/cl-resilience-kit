@@ -22,9 +22,8 @@
       inputs.treefmt-nix.follows = "treefmt-nix";
     };
 
-    # Main-system dependencies. cl-concurrent-kit in turn brings in the
-    # boundary and date packages it needs, while this project uses the
-    # boundary package directly for clocks, random sources, and sleepers.
+    # Main-system dependencies. This project uses the boundary package for
+    # clocks, random sources, and sleepers, and date-kit for executor timing.
     cl-boundary-kit = {
       url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -65,6 +64,7 @@
       cl-weave,
       cl-boundary-kit,
       cl-concurrent-kit,
+      cl-date-kit,
       treefmt-nix,
       ...
     }:
@@ -93,12 +93,14 @@
       pname = "cl-resilience-kit";
       asd = ./cl-resilience-kit.asd;
       root = ./.;
+      docs.root = ./docs;
       timeoutSeconds = testTimeoutSeconds;
       killAfterSeconds = terminationGraceSeconds;
 
       lispDependencies = ctx: [
         cl-boundary-kit.packages.${ctx.system}.cl-boundary-kit
         cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit
+        cl-date-kit.packages.${ctx.system}.cl-date-kit
       ];
 
       lispCheckDependencies = ctx: [

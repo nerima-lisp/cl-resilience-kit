@@ -1,0 +1,51 @@
+site_name: cl-resilience-kit
+site_description: Composable, dependency-neutral resilience primitives for Common Lisp
+site_url: https://nerima-lisp.github.io/cl-resilience-kit/
+repo_url: https://github.com/nerima-lisp/cl-resilience-kit
+repo_name: nerima-lisp/cl-resilience-kit
+edit_uri: edit/main/docs/src/
+docs_dir: src
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Guide:
+      - Core concepts: guide/core-concepts.md
+      - Recipes: guide/recipes.md
+  - Reference:
+      - API: reference/api.md
+      - Architecture: reference/architecture.md
+      - Compatibility: reference/compatibility.md
+  - Project:
+      - Development: project/development.md

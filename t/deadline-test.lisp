@@ -46,6 +46,42 @@
      :to-throw
      'error))
 
+  (it "rejects a non-finite absolute deadline"
+    (expect-condition
+     (lambda ()
+       (call-with-deadline (lambda () :never)
+                            :deadline :invalid))
+     'error))
+
+  (it "accepts an absolute monotonic deadline"
+    (let ((fixture (make-test-fixture :start 2)))
+      (multiple-value-bind (result deadline)
+          (call-with-deadline
+           (lambda () (values :ok (current-deadline)))
+           :deadline 5
+           :clock (test-fixture-clock fixture)
+           :monotonic-units-per-second +test-monotonic-units-per-second+)
+        (expect result :to-be :ok)
+        (expect deadline :to-be 5.0d0))))
+
+  (it "rejects an already expired absolute deadline before invocation"
+    (let* ((fixture (make-test-fixture :start 2))
+           (attempts 0)
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-deadline
+                 (lambda ()
+                   (incf attempts)
+                   :not-run)
+                 :deadline 1
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+))
+              'deadline-exceeded)))
+      (expect attempts :to-be 0)
+      (expect (deadline-exceeded-stage caught) :to-be :before-operation)))
+
   (it "distinguishes overall deadline from per-attempt timeout"
     (let* ((fixture (make-test-fixture))
            (caught nil)
@@ -143,14 +179,49 @@
                     'resilience-cancelled)))
       (expect (resilience-cancelled-reason caught) :to-be :completed-elsewhere))))
 
+  (it "rejects malformed cancellation arguments"
+    (let ((token (make-cancellation-token)))
+      (expect-condition
+       (lambda ()
+         (cancel-cancellation-token token :first :second))
+       'error)
+      (expect (cancellation-token-cancelled-p token) :to-be nil)))
+
   (it "preserves an operation error while unwinding"
     (let ((token (make-cancellation-token)))
       (expect-condition
        (lambda ()
-         (call-with-deadline
+       (call-with-deadline
           (lambda ()
             (cancel-cancellation-token token :during-failure)
             (error "original"))
           :timeout 10
           :cancellation-token token))
-       'simple-error)))
+       'simple-error))
+
+  (it "does not extend a parent deadline in nested scopes"
+    (let ((fixture (make-test-fixture)))
+      (expect
+       (call-with-deadline
+        (lambda ()
+          (call-with-deadline
+           (lambda () (current-deadline))
+           :timeout 10
+           :clock (test-fixture-clock fixture)
+           :monotonic-units-per-second
+           +test-monotonic-units-per-second+))
+        :timeout 1
+        :clock (test-fixture-clock fixture)
+        :monotonic-units-per-second
+        +test-monotonic-units-per-second+)
+       :to-be
+       1.0d0)))
+
+  (it "rejects non-positive monotonic units"
+    (expect-condition
+     (lambda ()
+       (call-with-deadline
+        (lambda () :never)
+        :timeout 1
+        :monotonic-units-per-second 0))
+     'error)))

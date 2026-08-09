@@ -95,7 +95,7 @@
 
 (defmethod state-store-scan-prefix ((store memory-state-store) prefix)
   (check-type prefix string)
-    (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
+  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
     (loop for key being the hash-keys of (%memory-state-store-records store)
           for record = (gethash key (%memory-state-store-records store))
           when (and (stringp key)

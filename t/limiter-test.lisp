@@ -1,6 +1,16 @@
 (in-package #:cl-resilience-kit/test)
 
 (describe "bulkheads and rate limiters"
+  (it "routes queued bulkheads through the generic bulkhead call"
+    (let ((bulkhead
+            (cl-resilience-kit:make-queued-bulkhead
+             :limit 1
+             :max-queue 0)))
+      (expect (bulkhead-call bulkhead (lambda () :queued))
+              :to-be
+              :queued)
+      (expect (bulkhead-in-flight bulkhead) :to-be 0)))
+
   (it "rejects a bulkhead call while its only slot is occupied"
     (let* ((bulkhead (make-bulkhead :limit 1))
            (entered (make-semaphore :count 0))
@@ -187,6 +197,123 @@
                     'resilience-cancelled)))
       (expect (resilience-cancelled-reason caught) :to-be :stop-waiting))))
 
+  (it "validates rate limiter configuration and exposes its state"
+    (expect-condition
+     (lambda () (make-rate-limiter :capacity 0))
+     'error)
+    (expect-condition
+     (lambda () (make-rate-limiter :refill-rate -1))
+     'error)
+    (expect-condition
+     (lambda () (make-rate-limiter :capacity 2 :initial-tokens 3))
+     'error)
+    (let ((limiter
+            (make-rate-limiter
+             :capacity 2
+             :refill-rate 0.5d0
+             :initial-tokens 1
+             :clock (cl-boundary-kit:make-fake-clock
+                     :start 7
+                     :monotonic-start 7)
+             :monotonic-units-per-second 1)))
+      (expect
+       (approximately-equal-p
+        (cl-resilience-kit:rate-limiter-capacity limiter)
+        2d0)
+       :to-be-truthy)
+      (expect
+       (approximately-equal-p
+        (cl-resilience-kit:rate-limiter-refill-rate limiter)
+        0.5d0)
+       :to-be-truthy)
+      (expect
+       (approximately-equal-p
+        (cl-resilience-kit:rate-limiter-last-refill limiter)
+        7d0)
+       :to-be-truthy)
+      (expect (approximately-equal-p (rate-limiter-tokens limiter) 1d0)
+              :to-be-truthy)))
+
+  (it "stops rate limiter waits at cooperative deadlines"
+    (let* ((fixture (make-test-fixture))
+           (limiter (make-rate-limiter
+                     :initial-tokens 1
+                     :clock (test-fixture-clock fixture)
+                     :monotonic-units-per-second
+                     +test-monotonic-units-per-second+
+                     :sleeper (test-fixture-sleeper fixture)))
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-deadline
+                 (lambda ()
+                   (advance-fixture fixture 2)
+                   (rate-limiter-acquire limiter :operation :expired))
+                 :timeout 1d0
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+))
+              'deadline-exceeded)))
+      (expect (cl-resilience-kit:deadline-exceeded-stage caught)
+              :to-be
+              :rate-limit))
+    (let* ((fixture (make-test-fixture))
+           (limiter (make-rate-limiter
+                     :initial-tokens 0
+                     :clock (test-fixture-clock fixture)
+                     :monotonic-units-per-second
+                     +test-monotonic-units-per-second+
+                     :sleeper (test-fixture-sleeper fixture)))
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-deadline
+                 (lambda ()
+                   (rate-limiter-acquire
+                    limiter
+                    :wait-p t
+                    :operation :wait-expired))
+                 :timeout 0.5d0
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+))
+              'deadline-exceeded)))
+      (expect (cl-resilience-kit:deadline-exceeded-stage caught)
+              :to-be
+              :rate-limit)))
+
+  (it "checks a cooperative deadline after a rate limiter sleeper"
+    (let* ((fixture (make-test-fixture))
+           (limiter (make-rate-limiter
+                     :initial-tokens 0
+                     :refill-rate 4
+                     :clock (test-fixture-clock fixture)
+                     :monotonic-units-per-second
+                     +test-monotonic-units-per-second+
+                     :sleeper
+                     (cl-boundary-kit:make-sleeper
+                      :sleep-fn
+                      (lambda (seconds)
+                        (declare (ignore seconds))
+                        (advance-fixture fixture 1d0)))))
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-deadline
+                 (lambda ()
+                   (rate-limiter-acquire
+                    limiter
+                    :wait-p t
+                    :operation :sleeper-expired))
+                 :timeout 1d0
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+))
+              'deadline-exceeded)))
+      (expect (cl-resilience-kit:deadline-exceeded-stage caught)
+              :to-be
+              :rate-limit)))
+
   (it "admits a bounded queued caller and releases both slots"
     (let* ((bulkhead (cl-resilience-kit:make-queued-bulkhead
                       :limit 1 :max-queue 1))
@@ -229,6 +356,24 @@
         (join-thread holder :timeout 5)
         (when waiter
           (join-thread waiter :timeout 5)))))
+
+(describe "bulkhead admission cancellation boundaries"
+  (it "checks a live cancellation token around admitted work"
+    (let* ((token (make-cancellation-token))
+           (bulkhead (cl-resilience-kit:make-queued-bulkhead
+                      :limit 1
+                      :max-queue 0)))
+      (expect
+       (cl-resilience-kit:queued-bulkhead-call
+        bulkhead
+        (lambda () :ok)
+        :cancellation-token token
+        :operation :live-token)
+       :to-be
+       :ok)
+      (expect (cl-resilience-kit:bulkhead-in-flight bulkhead)
+              :to-be
+              0))))
 
   (it "rejects a full queued bulkhead with a structured reason"
     (let* ((bulkhead (cl-resilience-kit:make-queued-bulkhead
@@ -299,3 +444,65 @@
                      :to-be 0))
         (signal-semaphore release)
         (join-thread holder :timeout 5))))
+
+  (it "cancels a queued bulkhead waiter and removes its queue entry"
+    (let* ((bulkhead (cl-resilience-kit:make-queued-bulkhead
+                      :limit 1 :max-queue 1))
+           (token (make-cancellation-token))
+           (entered (make-semaphore :count 0))
+           (release (make-semaphore :count 0))
+           (waiter-done (make-semaphore :count 0))
+           (waiter-condition nil)
+           (holder
+             (make-thread
+              (lambda ()
+                (cl-resilience-kit:queued-bulkhead-call
+                 bulkhead
+                 (lambda ()
+                   (signal-semaphore entered)
+                   (wait-on-semaphore release :timeout 5)
+                   :held)))))
+           (waiter nil))
+      (unwind-protect
+           (progn
+             (expect (wait-on-semaphore entered :timeout 5) :to-be-truthy)
+             (setf waiter
+                   (make-thread
+                    (lambda ()
+                      (unwind-protect
+                           (handler-case
+                               (cl-resilience-kit:queued-bulkhead-call
+                                bulkhead
+                                (lambda () :not-run)
+                                :cancellation-token token
+                                :operation :cancelled-waiter)
+                             (condition (condition)
+                               (setf waiter-condition condition)))
+                        (signal-semaphore waiter-done)))))
+             (loop repeat 500
+                   until (= (cl-resilience-kit:queued-bulkhead-queue-size
+                              bulkhead)
+                            1)
+                   do (sleep 0.001))
+             (expect (cl-resilience-kit:queued-bulkhead-queue-size bulkhead)
+                     :to-be
+                     1)
+             (cancel-cancellation-token token :cancelled)
+             (expect (wait-on-semaphore waiter-done :timeout 5)
+                     :to-be-truthy)
+             (expect (typep waiter-condition 'resilience-cancelled)
+                     :to-be-truthy)
+             (expect (resilience-cancelled-reason waiter-condition)
+                     :to-be
+                     :cancelled)
+             (expect (cl-resilience-kit:queued-bulkhead-queue-size bulkhead)
+                     :to-be
+                     0)
+             (signal-semaphore release)
+             (expect (join-thread holder :timeout 5) :to-be :held)
+             (expect (join-thread waiter :timeout 5) :to-be-truthy)
+             (expect (bulkhead-in-flight bulkhead) :to-be 0))
+        (signal-semaphore release)
+        (join-thread holder :timeout 5)
+        (when waiter
+          (join-thread waiter :timeout 5)))))

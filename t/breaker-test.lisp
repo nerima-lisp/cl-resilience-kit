@@ -41,6 +41,23 @@
               :failure)
       (expect (circuit-breaker-state breaker) :to-be :open)))
 
+  (it "reports classifier failures after recording the failure"
+    (let ((breaker
+            (make-circuit-breaker
+             :failure-threshold 1
+             :condition-classifier
+             (lambda (condition attempt)
+               (declare (ignore condition attempt))
+               (error "condition classifier failed")))))
+      (expect-condition
+       (lambda ()
+         (circuit-breaker-call
+          breaker
+          (lambda () (error "operation failed"))))
+       'error)
+      (expect (circuit-breaker-state breaker) :to-be :open)
+      (expect (circuit-breaker-failure-count breaker) :to-be 0)))
+
   (it "does not count cancellation observed after return as a failure"
     (let* ((token (make-cancellation-token))
            (breaker (make-circuit-breaker :failure-threshold 1)))

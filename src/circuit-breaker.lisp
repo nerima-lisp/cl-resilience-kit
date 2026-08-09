@@ -265,9 +265,9 @@ does not count as a circuit failure."
         (%emit-resilience-event
          active-handler :circuit-rejected
          :operation operation :condition rejection :reason :open
-         :clock *resilience-clock*
+         :clock (circuit-breaker-clock breaker)
          :monotonic-units-per-second
-         *resilience-monotonic-units-per-second*)
+         (circuit-breaker-monotonic-units-per-second breaker))
         (error rejection))
       (unwind-protect
            (let ((*resilience-cancellation-token* active-token)
@@ -295,9 +295,9 @@ does not count as a circuit failure."
                           :operation operation :condition operation-condition
                           :reason (resilience-cancelled-reason
                                    operation-condition)
-                          :clock *resilience-clock*
+                          :clock (circuit-breaker-clock breaker)
                           :monotonic-units-per-second
-                          *resilience-monotonic-units-per-second*)
+                          (circuit-breaker-monotonic-units-per-second breaker))
                          (error operation-condition))
                        (multiple-value-bind (failed-p classifier-error)
                            (%circuit-breaker-finish-classified
@@ -309,9 +309,9 @@ does not count as a circuit failure."
                           active-handler :circuit-failure
                           :operation operation :condition operation-condition
                           :reason (if failed-p :classified-failure :observed-error)
-                          :clock *resilience-clock*
+                          :clock (circuit-breaker-clock breaker)
                           :monotonic-units-per-second
-                          *resilience-monotonic-units-per-second*)
+                          (circuit-breaker-monotonic-units-per-second breaker))
                          (when classifier-error
                            (error classifier-error))
                          (error operation-condition)))
@@ -326,15 +326,15 @@ does not count as a circuit failure."
                           active-handler :circuit-failure
                           :operation operation :result (first returned)
                           :reason :classified-failure
-                          :clock *resilience-clock*
+                          :clock (circuit-breaker-clock breaker)
                           :monotonic-units-per-second
-                          *resilience-monotonic-units-per-second*)
+                          (circuit-breaker-monotonic-units-per-second breaker))
                          (%emit-resilience-event
                           active-handler :circuit-success
                           :operation operation :result (first returned)
-                          :clock *resilience-clock*
+                          :clock (circuit-breaker-clock breaker)
                           :monotonic-units-per-second
-                          *resilience-monotonic-units-per-second*))
+                          (circuit-breaker-monotonic-units-per-second breaker)))
                      (when classifier-error
                        (error classifier-error))
                      (apply #'values returned)))))

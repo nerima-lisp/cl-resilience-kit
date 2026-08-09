@@ -182,6 +182,43 @@
       (expect (deadline-exceeded-observed-at caught) :to-be 0d0)
       (expect (resilience-hard-timeout-backend caught) :to-be :thread)))
 
+  (it "reports a worker hard timeout from an executor backend"
+    (let* ((executor (make-resilience-executor :size 1))
+           (caught nil))
+      (unwind-protect
+           (setf caught
+                 (expect-condition
+                  (lambda ()
+                    (resilience-executor-call
+                     executor
+                     (lambda ()
+                       (sleep 0.05d0)
+                       :never)
+                     :hard-timeout 0.01d0
+                     :timeout 1d0
+                     :operation :worker-timeout))
+                  'resilience-hard-timeout))
+        (resilience-executor-shutdown executor :wait t))
+      (expect (attempt-timeout-timeout caught) :to-be 0.01d0)
+      (expect (resilience-hard-timeout-backend caught) :to-be :executor)))
+
+  (it "launches a delayed hedge after the first attempt times out"
+    (let ((executor (make-resilience-executor :size 2)))
+      (unwind-protect
+           (expect
+            (call-with-hedging
+             (lambda ()
+               (sleep 0.05d0)
+               :ok)
+             :hedge-after 0.01d0
+             :max-attempts 2
+             :executor executor
+             :hedge-safe-p t
+             :operation :delayed-hedge)
+            :to-be
+            :ok)
+        (resilience-executor-shutdown executor :wait t))))
+
   (it "uses the supplied executor for a single hedge attempt"
     (let* ((executor (make-resilience-executor :size 1))
            (caller-thread (current-thread))
@@ -273,6 +310,94 @@
         (signal-semaphore release)
         (join-thread owner-thread :default :not-joined :timeout 5))))
 
+  (it "requires an idempotency key for coalescing"
+    (let ((coalescer (make-request-coalescer)))
+      (expect-condition
+       (lambda ()
+         (call-with-request-coalescing
+          coalescer
+          (lambda () :must-not-run)))
+       'cl-resilience-kit:idempotency-key-required)
+      (expect (request-coalescer-size coalescer) :to-be 0)))
+
+  (it "delivers worker failures to coalesced callers"
+    (let ((coalescer (make-request-coalescer)))
+      (expect-condition
+       (lambda ()
+         (call-with-request-coalescing
+          coalescer
+          (lambda () (error "worker failure"))
+          :key "worker-error"
+          :operation :worker-error))
+       'error)
+      (expect (request-coalescer-size coalescer) :to-be 0)))
+
+  (it "preserves executor values and rejects submissions after shutdown"
+    (let ((executor (make-resilience-executor :size 1)))
+      (unwind-protect
+           (progn
+             (multiple-value-bind (first second)
+                 (resilience-executor-call
+                  executor
+                  (lambda () (values :first :second))
+                  :operation :multiple-values)
+               (expect first :to-be :first)
+               (expect second :to-be :second))
+             (expect
+              (resilience-executor-call
+               executor
+               (lambda () :single)
+               :operation :single-value)
+              :to-be
+              :single)
+             (resilience-executor-shutdown
+              executor
+              :wait t
+              :timeout 1d0)
+             (let ((caught
+                     (expect-condition
+                      (lambda ()
+                        (cl-resilience-kit:resilience-executor-submit
+                         executor
+                         (lambda () :not-run)
+                         :operation :rejected))
+                      'cl-resilience-kit:resilience-execution-rejected)))
+               (expect
+                (cl-resilience-kit:resilience-execution-rejected-reason caught)
+                :to-be
+                :executor-rejected)
+               (expect
+                (cl-resilience-kit:resilience-execution-rejected-queue-size
+                 caught)
+                :to-be
+                0)))
+        (unless (cl-resilience-kit:resilience-executor-shutdown-p executor)
+          (resilience-executor-shutdown executor :wait t)))))
+
+  (it "removes coalesced entries when executor submission is rejected"
+    (let* ((executor (make-resilience-executor :size 1))
+           (coalescer (make-request-coalescer)))
+      (unwind-protect
+           (progn
+             (resilience-executor-shutdown executor :wait t)
+             (let ((caught
+                     (expect-condition
+                      (lambda ()
+                        (call-with-request-coalescing
+                         coalescer
+                         (lambda () :must-not-run)
+                         :executor executor
+                         :key "rejected-submission"
+                         :operation :rejected-submission))
+                      'cl-resilience-kit:resilience-execution-rejected)))
+               (expect
+                (cl-resilience-kit:resilience-execution-rejected-reason caught)
+                :to-be
+                :executor-rejected))
+             (expect (request-coalescer-size coalescer) :to-be 0))
+        (unless (cl-resilience-kit:resilience-executor-shutdown-p executor)
+          (resilience-executor-shutdown executor :wait t)))))
+
   (it "settles and removes a coalesced entry after a nonlocal exit"
     (let* ((coalescer (make-request-coalescer))
            (tag (gensym "COALESCED-EXIT-"))
@@ -287,3 +412,127 @@
               'resilience-error)))
       (expect (typep caught 'resilience-error) :to-be-truthy)
       (expect (request-coalescer-size coalescer) :to-be 0))))
+
+(describe "context-derived coalescing identity"
+  (it "uses the idempotency key from the current context"
+    (let* ((coalescer (make-request-coalescer))
+           (executor (make-resilience-executor :size 1)))
+      (unwind-protect
+           (expect
+            (cl-resilience-kit:with-resilience-context
+                (:idempotency-key "context-key")
+              (call-with-request-coalescing
+               coalescer
+               (lambda () :ok)
+               :executor
+               executor
+               :operation
+               :context-key))
+            :to-be
+            :ok)
+        (cl-resilience-kit:resilience-executor-shutdown
+         executor
+         :wait
+         t))))
+
+  (it "merges explicit context over the current operation context"
+    (cl-resilience-kit:with-resilience-context
+        (:trace-id "parent-trace")
+      (expect
+       (call-with-resilience
+        (lambda ()
+          (let ((context (cl-resilience-kit:current-resilience-context)))
+            (list (cl-resilience-kit:resilience-context-operation context)
+                  (cl-resilience-kit:resilience-context-trace-id context)
+                  (cl-resilience-kit:resilience-context-correlation-id context))))
+        :operation :explicit-operation
+        :context
+        (cl-resilience-kit:make-resilience-context
+         :correlation-id
+         "child-correlation"))
+       :to-equal
+       '(:explicit-operation "parent-trace" "child-correlation")))))
+
+(describe "backend timeout propagation"
+  (it "propagates a non-await timeout from an executor worker"
+    (let ((executor (make-resilience-executor :size 1)))
+      (unwind-protect
+           (let ((caught
+                   (expect-condition
+                    (lambda ()
+                      (resilience-executor-call
+                       executor
+                       (lambda ()
+                         (error
+                          (make-condition
+                           'cl-concurrent-kit:operation-timed-out
+                           :operation :worker
+                           :timeout 0.01d0)))
+                       :timeout 1d0
+                       :operation :raw-worker-timeout))
+                    'cl-concurrent-kit:operation-timed-out)))
+             (expect
+              (cl-concurrent-kit:operation-timed-out-operation caught)
+              :to-be
+              :worker))
+        (resilience-executor-shutdown executor :wait t))))
+
+  (it "preserves a worker timeout raised inside a hard-timeout wrapper"
+    (let ((executor (make-resilience-executor :size 1)))
+      (unwind-protect
+           (let ((caught
+                   (expect-condition
+                    (lambda ()
+                      (resilience-executor-call
+                       executor
+                       (lambda ()
+                         (error
+                          (make-condition
+                           'cl-concurrent-kit:operation-timed-out
+                           :operation :worker-hard-timeout
+                           :timeout 0.01d0)))
+                       :hard-timeout 1d0
+                       :timeout 2d0
+                       :operation :raw-hard-timeout))
+                    'cl-concurrent-kit:operation-timed-out)))
+             (expect
+              (cl-concurrent-kit:operation-timed-out-operation caught)
+              :to-be
+              :worker-hard-timeout))
+        (resilience-executor-shutdown executor :wait t))))
+
+  (it "propagates a non-await timeout from a hedge attempt"
+    (let ((caught
+            (expect-condition
+             (lambda ()
+               (call-with-hedging
+                (lambda ()
+                  (error
+                   (make-condition
+                    'cl-concurrent-kit:operation-timed-out
+                    :operation :hedge-worker
+                    :timeout 0.01d0)))
+                :hedge-after 0.01d0
+                :max-attempts 2
+                :hedge-safe-p t
+                :operation :raw-hedge-timeout))
+             'cl-concurrent-kit:operation-timed-out)))
+      (expect
+       (cl-concurrent-kit:operation-timed-out-operation caught)
+       :to-be
+       :hedge-worker))))
+
+  (it "records an initial delayed hedge failure before exhaustion"
+    (let ((caught
+            (expect-condition
+             (lambda ()
+               (call-with-hedging
+                (lambda ()
+                  (error "delayed hedge failure"))
+                :hedge-after 0.01d0
+                :max-attempts 2
+                :hedge-safe-p t
+                :operation :delayed-failure))
+             'cl-resilience-kit:hedge-exhausted)))
+      (expect (cl-resilience-kit:hedge-exhausted-attempts caught) :to-be 2)
+      (expect (length (cl-resilience-kit:hedge-exhausted-causes caught)) :to-be 3)))

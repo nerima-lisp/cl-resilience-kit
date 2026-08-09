@@ -10,7 +10,7 @@
   :homepage "https://github.com/nerima-lisp/cl-resilience-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-resilience-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-resilience-kit.git")
-  :depends-on ("cl-boundary-kit" "cl-concurrent-kit")
+  :depends-on ("cl-boundary-kit" "cl-concurrent-kit" "cl-date-kit")
   :pathname "src"
   :serial t
   :components ((:file "package")
@@ -57,7 +57,8 @@
                (:file "deadline-test")
                (:file "breaker-test")
                (:file "limiter-test")
-               (:file "composition-test"))
+               (:file "composition-test")
+               (:file "contract-test"))
   :perform (asdf:test-op (operation component)
              (declare (ignore operation component))
              (uiop:symbol-call :cl-resilience-kit/test :run-tests)))
