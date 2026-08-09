@@ -1,6 +1,34 @@
 (in-package #:cl-resilience-kit/test)
 
 (describe "bulkheads and rate limiters"
+  (it "validates bulkhead capacity and queue configuration"
+    (expect-condition
+     (lambda () (cl-resilience-kit:make-bulkhead :limit 0))
+     'error)
+    (expect-condition
+     (lambda () (cl-resilience-kit:make-bulkhead :limit 1.5))
+     'error)
+    (expect-condition
+     (lambda ()
+       (cl-resilience-kit:make-queued-bulkhead :limit 0 :max-queue 0))
+     'error)
+    (expect-condition
+     (lambda ()
+       (cl-resilience-kit:make-queued-bulkhead :limit 1 :max-queue -1))
+     'error)
+    (expect-condition
+     (lambda ()
+       (cl-resilience-kit:make-queued-bulkhead :limit 1 :max-queue 0.5))
+     'error))
+
+  (it "rejects non-real rate limiter configuration"
+    (expect-condition
+     (lambda () (cl-resilience-kit:make-rate-limiter :capacity :invalid))
+     'error)
+    (expect-condition
+     (lambda () (cl-resilience-kit:make-rate-limiter :refill-rate :invalid))
+     'error))
+
   (it "routes queued bulkheads through the generic bulkhead call"
     (let ((bulkhead
             (cl-resilience-kit:make-queued-bulkhead
@@ -10,6 +38,23 @@
               :to-be
               :queued)
       (expect (bulkhead-in-flight bulkhead) :to-be 0)))
+
+  (it "preserves multiple values through bulkhead calls"
+    (let ((bulkhead (cl-resilience-kit:make-bulkhead :limit 1)))
+      (multiple-value-bind (first second)
+          (bulkhead-call bulkhead (lambda () (values :first :second)))
+        (expect first :to-be :first)
+        (expect second :to-be :second)))
+    (let ((bulkhead
+            (cl-resilience-kit:make-queued-bulkhead
+             :limit 1
+             :max-queue 0)))
+      (multiple-value-bind (first second)
+          (cl-resilience-kit:queued-bulkhead-call
+           bulkhead
+           (lambda () (values :first :second)))
+        (expect first :to-be :first)
+        (expect second :to-be :second))))
 
   (it "rejects a bulkhead call while its only slot is occupied"
     (let* ((bulkhead (make-bulkhead :limit 1))

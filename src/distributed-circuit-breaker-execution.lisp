@@ -14,7 +14,7 @@
         (finished-p nil))
     (when active-token
       (check-cancellation-token active-token))
-    (multiple-value-bind (admitted token rejection)
+    (multiple-value-bind (admitted token-state token-generation rejection)
         (%distributed-circuit-breaker-begin breaker operation)
       (unless admitted
         (%emit-resilience-event
@@ -39,7 +39,8 @@
                (if operation-condition
                    (if (typep operation-condition 'resilience-cancelled)
                        (progn
-                         (%distributed-circuit-breaker-finish breaker token nil)
+                         (%distributed-circuit-breaker-finish
+                          breaker token-state token-generation nil)
                          (setf finished-p t)
                          (%emit-resilience-event
                           active-handler :cancelled
@@ -52,7 +53,7 @@
                          (error operation-condition))
                        (multiple-value-bind (failed-p classifier-error)
                            (%distributed-circuit-breaker-finish-classified
-                            breaker token
+                            breaker token-state token-generation
                             (distributed-circuit-breaker-condition-classifier
                              breaker)
                             operation-condition)
@@ -69,7 +70,7 @@
                          (error operation-condition)))
                    (multiple-value-bind (failed-p classifier-error)
                        (%distributed-circuit-breaker-finish-classified
-                        breaker token
+                        breaker token-state token-generation
                         (distributed-circuit-breaker-result-classifier breaker)
                         (first returned))
                      (setf finished-p t)
@@ -91,4 +92,5 @@
                        (error classifier-error))
                      (apply #'values returned)))))
         (unless finished-p
-          (%distributed-circuit-breaker-finish breaker token t))))))
+          (%distributed-circuit-breaker-finish
+           breaker token-state token-generation t))))))

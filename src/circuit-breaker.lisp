@@ -143,7 +143,8 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
       (case (%circuit-breaker-state breaker)
         (:closed
          (values t
-                 (list :closed (%circuit-breaker-generation breaker))
+                 :closed
+                 (%circuit-breaker-generation breaker)
                  nil))
         (:open
          (let* ((opened-at (%circuit-breaker-opened-at breaker))
@@ -155,13 +156,13 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
                  (setf (%circuit-breaker-state breaker) :half-open
                        (%circuit-breaker-generation breaker)
                        (1+ (%circuit-breaker-generation breaker))
-                       (%circuit-breaker-active-probes breaker) 1
+                 (%circuit-breaker-active-probes breaker) 1
                        (%circuit-breaker-half-open-successes breaker) 0)
                  (values t
-                         (list :half-open
-                               (%circuit-breaker-generation breaker))
+                         :half-open
+                         (%circuit-breaker-generation breaker)
                          nil))
-               (values nil nil
+               (values nil nil nil
                        (%circuit-open-condition
                         :open retry-at (%circuit-breaker-generation breaker)
                         operation)))))
@@ -171,10 +172,10 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
              (progn
                (incf (%circuit-breaker-active-probes breaker))
                (values t
-                       (list :half-open
-                             (%circuit-breaker-generation breaker))
+                       :half-open
+                       (%circuit-breaker-generation breaker)
                        nil))
-             (values nil nil
+             (values nil nil nil
                      (%circuit-open-condition
                       :half-open nil (%circuit-breaker-generation breaker)
                       operation))))
@@ -191,14 +192,13 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
         (%circuit-breaker-generation breaker)
         (1+ (%circuit-breaker-generation breaker))))
 
-(defun %circuit-breaker-finish (breaker token failed-p)
+(defun %circuit-breaker-finish
+    (breaker token-state token-generation failed-p)
   (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
-    (let ((token-state (first token))
-          (token-generation (second token)))
-      ;; A completion from an obsolete generation cannot overwrite a newer
-      ;; reset, close, or reopen transition.
-      (when (= token-generation (%circuit-breaker-generation breaker))
-        (case token-state
+    ;; A completion from an obsolete generation cannot overwrite a newer
+    ;; reset, close, or reopen transition.
+    (when (= token-generation (%circuit-breaker-generation breaker))
+      (case token-state
           (:closed
            (when (eq (%circuit-breaker-state breaker) :closed)
              (if failed-p
@@ -226,10 +226,10 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
                            (%circuit-breaker-active-probes breaker) 0
                            (%circuit-breaker-half-open-successes breaker) 0
                            (%circuit-breaker-generation breaker)
-                           (1+ (%circuit-breaker-generation breaker)))))))))))))
+                           (1+ (%circuit-breaker-generation breaker))))))))))))
 
 (defun %circuit-breaker-finish-classified
-    (breaker token classifier value)
+    (breaker token-state token-generation classifier value)
   (let ((failed-p nil)
         (classifier-error nil))
     (handler-case
@@ -239,7 +239,8 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
       (error (condition)
         (setf failed-p t
               classifier-error condition)))
-    (%circuit-breaker-finish breaker token failed-p)
+    (%circuit-breaker-finish
+     breaker token-state token-generation failed-p)
     (values failed-p classifier-error)))
 
 (defun circuit-breaker-call
@@ -259,7 +260,7 @@ does not count as a circuit failure."
         (finished-p nil))
     (when active-token
       (check-cancellation-token active-token))
-    (multiple-value-bind (admitted token rejection)
+    (multiple-value-bind (admitted token-state token-generation rejection)
         (%circuit-breaker-begin breaker operation)
       (unless admitted
         (%emit-resilience-event
@@ -288,7 +289,8 @@ does not count as a circuit failure."
                    (if (typep operation-condition 'resilience-cancelled)
                        (progn
                          ;; Caller cancellation must not poison the circuit.
-                         (%circuit-breaker-finish breaker token nil)
+                         (%circuit-breaker-finish
+                          breaker token-state token-generation nil)
                          (setf finished-p t)
                          (%emit-resilience-event
                           active-handler :cancelled
@@ -301,7 +303,7 @@ does not count as a circuit failure."
                          (error operation-condition))
                        (multiple-value-bind (failed-p classifier-error)
                            (%circuit-breaker-finish-classified
-                            breaker token
+                            breaker token-state token-generation
                             (circuit-breaker-condition-classifier breaker)
                             operation-condition)
                          (setf finished-p t)
@@ -317,7 +319,7 @@ does not count as a circuit failure."
                          (error operation-condition)))
                    (multiple-value-bind (failed-p classifier-error)
                        (%circuit-breaker-finish-classified
-                        breaker token
+                        breaker token-state token-generation
                         (circuit-breaker-result-classifier breaker)
                         (first returned))
                      (setf finished-p t)
@@ -341,7 +343,8 @@ does not count as a circuit failure."
         (unless finished-p
           ;; This also covers THROW, RETURN-FROM, and any other non-local exit
           ;; from THUNK or a callback after admission.
-          (%circuit-breaker-finish breaker token t))))))
+          (%circuit-breaker-finish
+           breaker token-state token-generation t))))))
 
 (defun circuit-breaker-reset (breaker)
   "Force BREAKER to CLOSED and invalidate older in-flight completions."

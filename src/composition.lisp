@@ -12,7 +12,18 @@
           ((null (rest handlers)) (first handlers))
           (t (lambda (event)
                (dolist (handler handlers)
-                 (funcall handler event)))))))
+               (funcall handler event)))))))
+
+(defun %call-with-resilience/k (thunk on-success on-error)
+  "Run THUNK and dispatch its result through explicit continuations.
+ON-SUCCESS receives every value returned by THUNK.  ON-ERROR receives the
+condition signaled by THUNK."
+  (multiple-value-call on-success
+    (handler-case
+        (funcall thunk)
+      (error (condition)
+        (return-from %call-with-resilience/k
+          (funcall on-error condition))))))
 
 (defun call-with-resilience
     (thunk &key retry-policy circuit-breaker distributed-circuit-breaker
@@ -27,10 +38,10 @@
                  request-coalescer idempotency-key idempotency-fingerprint)
   "Compose local and distributed resilience controls around THUNK.
 
-The existing retry/bulkhead/rate-limit/circuit-breaker contract is preserved.
-EXECUTOR, HARD-TIMEOUT, HEDGE-AFTER, and REQUEST-COALESCER add optional
-execution-boundary controls; hedging and coalescing require idempotency
-protection and do not cancel already running loser work."
+The v2 composition boundary combines retry, bulkhead, rate-limit, and
+circuit-breaker controls with optional execution-boundary controls.  EXECUTOR,
+HARD-TIMEOUT, HEDGE-AFTER, and REQUEST-COALESCER require the explicit
+idempotency and cancellation choices documented by their respective APIs."
   (check-type thunk function)
   (when context
     (check-type context resilience-context))
@@ -138,35 +149,48 @@ protection and do not cancel already running loser work."
                           :monotonic-units-per-second
                           monotonic-units-per-second))
                         (t (run-base)))))
-             (handler-case
-                 (multiple-value-prog1
-                     (run-execution)
-                   (%emit-resilience-event
-                    active-handler :operation-complete
-                    :operation operation
-                    :stage :composition
-                    :context active-context
-                    :duration (- (%now :clock clock
-                                       :monotonic-units-per-second
-                                       monotonic-units-per-second)
-                                 started)
-                    :clock clock
-                    :monotonic-units-per-second
-                    monotonic-units-per-second))
-               (error (condition)
-                 (%emit-resilience-event
-                  active-handler :operation-failed
-                  :operation operation
-                  :stage :composition
-                  :condition condition
-                  :context active-context
-                  :duration (- (%now :clock clock
-                                     :monotonic-units-per-second
-                                     monotonic-units-per-second)
-                               started)
-                  :clock clock
-                  :monotonic-units-per-second
-                  monotonic-units-per-second)
-                 (error condition)))))
+             ;; Keep the success values in UNWIND-PROTECT's implicit value
+             ;; preservation instead of collecting them in an &REST list.
+             ;; The cleanup runs after HANDLER-CASE has left its handler
+             ;; dynamic extent, so observer errors are not misclassified as
+             ;; operation failures.
+             (let ((operation-complete-p nil)
+                   (operation-condition nil))
+               (unwind-protect
+                   (handler-case
+                       (multiple-value-prog1
+                           (run-execution)
+                         (setf operation-complete-p t))
+                     (error (condition)
+                       (setf operation-condition condition)
+                       (values)))
+                 (if operation-complete-p
+                     (%emit-resilience-event
+                      active-handler :operation-complete
+                      :operation operation
+                      :stage :composition
+                      :context active-context
+                      :duration (- (%now :clock clock
+                                         :monotonic-units-per-second
+                                         monotonic-units-per-second)
+                                   started)
+                      :clock clock
+                      :monotonic-units-per-second
+                      monotonic-units-per-second)
+                     (progn
+                       (%emit-resilience-event
+                        active-handler :operation-failed
+                        :operation operation
+                        :stage :composition
+                        :condition operation-condition
+                        :context active-context
+                        :duration (- (%now :clock clock
+                                           :monotonic-units-per-second
+                                           monotonic-units-per-second)
+                                     started)
+                        :clock clock
+                        :monotonic-units-per-second
+                        monotonic-units-per-second)
+                       (error operation-condition)))))))
       (when entered-p
         (leave-resilience-lifecycle lifecycle)))))

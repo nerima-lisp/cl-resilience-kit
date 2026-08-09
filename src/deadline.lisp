@@ -75,7 +75,8 @@ preemptive interruption is required."
                                    :stage :before-operation))
     ;; Run post-call checks only after a normal return. A cleanup check that
     ;; signals here would otherwise mask the condition raised by THUNK.
-    (let ((returned (multiple-value-list (funcall thunk))))
+    (multiple-value-prog1
+        (funcall thunk)
       (%check-active-cancellation-token)
       (when (and effective-deadline
                  (>= (%monotonic-seconds active-clock units)
@@ -86,8 +87,7 @@ preemptive interruption is required."
          :clock active-clock :monotonic-units-per-second units)
         (%signal-deadline-exceeded active-clock units effective-deadline
                                    :operation operation
-                                   :stage :operation))
-      (apply #'values returned)))))
+                                   :stage :operation))))))
 
 (defmacro with-deadline ((&rest options) &body body)
   "Evaluate BODY under CALL-WITH-DEADLINE's cooperative deadline.

@@ -18,9 +18,8 @@
                (:closed
                 (return-from %distributed-circuit-breaker-begin
                   (values t
-                          (list :state :closed
-                                :generation generation
-                                :version version)
+                          :closed
+                          generation
                           nil)))
                (:open
                 (let* ((opened-at (getf state :opened-at))
@@ -36,18 +35,16 @@
                               (getf next :failure-count) 0
                               (getf next :generation) (1+ generation))
                         (handler-case
-                            (let ((new-version
-                                    (state-store-put-if-version
-                                     store key next version)))
+                            (progn
+                              (state-store-put-if-version store key next version)
                               (return-from %distributed-circuit-breaker-begin
                                 (values t
-                                        (list :state :half-open
-                                              :generation (getf next :generation)
-                                              :version new-version)
+                                        :half-open
+                                        (getf next :generation)
                                         nil)))
                           (resilience-store-conflict () nil)))
                       (return-from %distributed-circuit-breaker-begin
-                        (values nil nil
+                        (values nil nil nil
                                 (%distributed-circuit-breaker-open-condition
                                  :open retry-at generation operation))))))
                (:half-open
@@ -57,18 +54,16 @@
                     (let ((next (copy-list state)))
                       (incf (getf next :active-probes))
                       (handler-case
-                          (let ((new-version
-                                  (state-store-put-if-version
-                                   store key next version)))
+                          (progn
+                            (state-store-put-if-version store key next version)
                             (return-from %distributed-circuit-breaker-begin
                               (values t
-                                      (list :state :half-open
-                                            :generation generation
-                                            :version new-version)
+                                      :half-open
+                                      generation
                                       nil)))
                         (resilience-store-conflict () nil)))
                     (return-from %distributed-circuit-breaker-begin
-                      (values nil nil
+                      (values nil nil nil
                               (%distributed-circuit-breaker-open-condition
                                :half-open nil generation operation)))))
                (otherwise
@@ -78,14 +73,12 @@
         breaker "Could not reserve a distributed circuit-breaker call."))))
 
 (defun %distributed-circuit-breaker-finish
-    (breaker token failed-p)
+    (breaker token-state token-generation failed-p)
   (%distributed-circuit-breaker-with-lease
    breaker
    (lambda ()
      (let ((store (distributed-circuit-breaker-store breaker))
-           (key (distributed-circuit-breaker-key breaker))
-           (token-state (getf token :state))
-           (token-generation (getf token :generation)))
+           (key (distributed-circuit-breaker-key breaker)))
        (loop repeat 64 do
          (multiple-value-bind (state version)
              (%distributed-circuit-breaker-read breaker)
@@ -144,7 +137,7 @@
         breaker "Could not record the distributed circuit-breaker result.")))))
 
 (defun %distributed-circuit-breaker-finish-classified
-    (breaker token classifier value)
+    (breaker token-state token-generation classifier value)
   (let ((failed-p nil)
         (classifier-error nil))
     (handler-case
@@ -154,5 +147,6 @@
       (error (condition)
         (setf failed-p t
               classifier-error condition)))
-    (%distributed-circuit-breaker-finish breaker token failed-p)
+    (%distributed-circuit-breaker-finish
+     breaker token-state token-generation failed-p)
     (values failed-p classifier-error)))

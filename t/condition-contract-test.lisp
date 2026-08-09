@@ -13,6 +13,9 @@
       (expect (cl-resilience-kit:leave-resilience-lifecycle lifecycle)
               :to-be
               0)
+      (expect (cl-resilience-kit:leave-resilience-lifecycle lifecycle)
+              :to-be
+              0)
       (expect
        (cl-resilience-kit:with-resilience-lifecycle
            (lifecycle :operation :macro)

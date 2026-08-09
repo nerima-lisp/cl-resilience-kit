@@ -47,6 +47,6 @@ nav:
   - Reference:
       - API: reference/api.md
       - Architecture: reference/architecture.md
-      - Compatibility: reference/compatibility.md
+      - Runtime contracts: reference/runtime-contracts.md
   - Project:
       - Development: project/development.md

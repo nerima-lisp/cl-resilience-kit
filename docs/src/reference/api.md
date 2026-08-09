@@ -70,7 +70,41 @@ idempotency fingerprints as an error.
 
 Cancellation is provided by `make-cancellation-token`,
 `cancel-cancellation-token`, `cancellation-token-cancelled-p`, and
-`check-cancellation-token`.
+`check-cancellation-token`. Cancellation is cooperative: a token is observed at
+resilience boundaries and does not interrupt an arbitrary non-cooperating thunk.
+
+## Conditions and events
+
+Operational failures inherit from `resilience-error`. Handle condition classes
+and their readers rather than parsing printed reports. The main public boundary
+conditions are:
+
+| Condition | Contract data |
+| --- | --- |
+| `resilience-cancelled` | `resilience-cancelled-reason` and the originating token. |
+| `retry-exhausted` | Attempt count, last condition/result, reason, and policy. |
+| `retry-classifier-error` | The classifier failure in `retry-classifier-error-cause`; this is re-signaled. |
+| `deadline-exceeded` / `attempt-timeout` | Deadline, observed time, stage, attempt, and timeout. |
+| `circuit-open` / `bulkhead-rejected` / `rate-limit-exceeded` | Admission state, capacity, token counts, and optional retry delay. |
+| `resilience-draining` / `resilience-execution-rejected` / `resilience-execution-timeout` / `resilience-hard-timeout` | Lifecycle, queue rejection, timeout, or backend data. |
+| `hedge-unsafe` / `hedge-exhausted` / `idempotency-key-required` / `idempotency-conflict` | The idempotency or speculative-execution failure details. |
+| `resilience-store-error` and lease/fencing conditions | Store key, cause, owner, lease, or fencing-token data. |
+
+When a retry policy is configured, `fallback` is called with the terminal
+`retry-exhausted`, `deadline-exceeded`, or `resilience-cancelled` condition and
+its return values become the operation result. A `retry-classifier-error` is
+re-signaled so a broken classifier cannot be hidden by fallback.
+
+`resilience-event` is a best-effort observation. Its `type` and `stage` are
+implementation-defined keywords, not a closed enum; consumers should tolerate
+new values. Event handlers receive the event object, and handler errors are
+swallowed so observation cannot change operation control flow. Use the event
+readers (`resilience-event-type`, `resilience-event-operation`,
+`resilience-event-attempt`, `resilience-event-stage`, `resilience-event-condition`,
+`resilience-event-result`, `resilience-event-delay`,
+`resilience-event-reason`, `resilience-event-timestamp`, `resilience-event-context`,
+`resilience-event-metadata`, and `resilience-event-duration`) for structured
+data.
 
 ## Composition
 

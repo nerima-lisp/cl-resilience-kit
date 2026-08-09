@@ -74,5 +74,5 @@ Use injected boundaries when reproducibility or integration control matters:
 - a state store and optional lease store for distributed coordination.
 
 See [Recipes](guide/recipes.md) for composed controls and
-[Compatibility](reference/compatibility.md) for the process and timeout
+[Runtime contracts](reference/runtime-contracts.md) for the process and timeout
 boundaries.

@@ -82,12 +82,12 @@ queue."
               *resilience-monotonic-units-per-second*)
              (when active-token
                (check-cancellation-token active-token))
-             (let ((returned (multiple-value-list (funcall thunk))))
+             (multiple-value-prog1
+                 (funcall thunk)
                ;; Observe cancellation after a cooperative return while the
                ;; UNWIND-PROTECT still guarantees that the slot is released.
                (when active-token
-                 (check-cancellation-token active-token))
-               (apply #'values returned)))
+                 (check-cancellation-token active-token))))
         (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
           (decf (%bulkhead-in-flight bulkhead)))
         (%emit-resilience-event
@@ -287,10 +287,10 @@ worker threads and does not cancel a call that has already been admitted."
               *resilience-monotonic-units-per-second*)
              (when active-token
                (check-cancellation-token active-token))
-             (let ((returned (multiple-value-list (funcall thunk))))
+             (multiple-value-prog1
+                 (funcall thunk)
                (when active-token
-                 (check-cancellation-token active-token))
-               (apply #'values returned)))
+                 (check-cancellation-token active-token))))
         (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
           (decf (%bulkhead-in-flight bulkhead))
           (cl-concurrent-kit:condition-notify

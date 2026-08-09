@@ -43,7 +43,8 @@
                                      :attempt attempt)))
     ;; Run post-call checks only after a normal return. A cleanup check that
     ;; signals here would otherwise mask the condition raised by THUNK.
-    (let ((returned (multiple-value-list (funcall thunk))))
+    (multiple-value-prog1
+        (funcall thunk)
       (%check-active-cancellation-token)
       (when (and effective-deadline
                  (>= (%monotonic-seconds clock units) effective-deadline))
@@ -54,8 +55,7 @@
             (%signal-deadline-exceeded clock units effective-deadline
                                        :operation operation
                                        :stage :attempt
-                                       :attempt attempt)))
-      (apply #'values returned))))
+                                       :attempt attempt))))))
 
 (defun %make-retry-exhausted
     (policy attempt last-condition last-result reason operation)
@@ -210,52 +210,60 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
                         :operation operation :attempt attempt
                         :clock active-clock
                         :monotonic-units-per-second units)
-                       (let* ((returned
-                              (multiple-value-list
-                               (%execute-attempt
-                                thunk active-clock units effective-deadline
-                                per-attempt-timeout operation attempt)))
-                            (result (first returned))
-                            (decision
-                              (%retry-decision-for
-                               policy attempt :result result)))
-                       (if (retry-decision-retry-p decision)
-                           (progn
-                             (%emit-resilience-event
-                              active-handler :attempt-failure
-                              :operation operation :attempt attempt
-                              :result result :reason
-                              (retry-decision-reason decision)
-                              :clock active-clock
-                              :monotonic-units-per-second units)
-                             (if (>= attempt (retry-policy-max-attempts policy))
-                                 (let ((exhausted
-                                         (%make-retry-exhausted
-                                          policy attempt nil result
-                                          (retry-decision-reason decision)
-                                          operation)))
+                       (if (and (null active-handler)
+                                (or (not (retry-policy-retry-safe-p policy))
+                                    (null (retry-policy-result-classifier
+                                           policy))))
+                           (%execute-attempt
+                            thunk active-clock units effective-deadline
+                            per-attempt-timeout operation attempt)
+                           (let* ((returned
+                                    (multiple-value-list
+                                     (%execute-attempt
+                                      thunk active-clock units effective-deadline
+                                      per-attempt-timeout operation attempt)))
+                                  (result (first returned))
+                                  (decision
+                                    (%retry-decision-for
+                                     policy attempt :result result)))
+                             (if (retry-decision-retry-p decision)
+                                 (progn
                                    (%emit-resilience-event
-                                    active-handler :retry-exhausted
+                                    active-handler :attempt-failure
                                     :operation operation :attempt attempt
                                     :result result :reason
                                     (retry-decision-reason decision)
                                     :clock active-clock
                                     :monotonic-units-per-second units)
-                                   (error exhausted))
-                               (let ((delay
-                                       (%retry-delay-or-deadline
-                                        policy attempt previous-delay decision
-                                        active-clock units effective-deadline
-                                        active-sleeper operation nil result
-                                        retry-budget active-handler)))
-                                 (run-loop (1+ attempt) delay))))
-                           (progn
-                             (%emit-resilience-event
-                              active-handler :attempt-success
-                              :operation operation :attempt attempt
-                              :result result :clock active-clock
-                              :monotonic-units-per-second units)
-                             (apply #'values returned)))))
+                                   (if (>= attempt
+                                           (retry-policy-max-attempts policy))
+                                       (let ((exhausted
+                                               (%make-retry-exhausted
+                                                policy attempt nil result
+                                                (retry-decision-reason decision)
+                                                operation)))
+                                         (%emit-resilience-event
+                                          active-handler :retry-exhausted
+                                          :operation operation :attempt attempt
+                                          :result result :reason
+                                          (retry-decision-reason decision)
+                                          :clock active-clock
+                                          :monotonic-units-per-second units)
+                                         (error exhausted))
+                                       (let ((delay
+                                               (%retry-delay-or-deadline
+                                                policy attempt previous-delay decision
+                                                active-clock units effective-deadline
+                                                active-sleeper operation nil result
+                                                retry-budget active-handler)))
+                                         (run-loop (1+ attempt) delay))))
+                                 (progn
+                                   (%emit-resilience-event
+                                    active-handler :attempt-success
+                                    :operation operation :attempt attempt
+                                    :result result :clock active-clock
+                                    :monotonic-units-per-second units)
+                                   (apply #'values returned))))))
                    ;; ATTEMPT-TIMEOUT is retryable only when the caller's
                    ;; classifier explicitly opts into retrying it.
                    (attempt-timeout (condition)

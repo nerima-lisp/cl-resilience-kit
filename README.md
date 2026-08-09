@@ -92,7 +92,7 @@ their state transitions.
 - [Recipes](docs/src/guide/recipes.md)
 - [API reference](docs/src/reference/api.md)
 - [Architecture](docs/src/reference/architecture.md)
-- [Compatibility](docs/src/reference/compatibility.md)
+- [Runtime contracts](docs/src/reference/runtime-contracts.md)
 - [Development](docs/src/project/development.md)
 
 The reference covers cooperative timeout semantics, retry safety, composition

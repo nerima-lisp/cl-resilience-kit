@@ -148,7 +148,7 @@
       packageArgs = _: {
         preBuild = ''
           sourceRoot="$PWD"
-          stableRoot=/tmp/cl-resilience-kit-source-v2
+          stableRoot="/tmp/cl-resilience-kit-source-v2-$name"
           mkdir -p -m 0777 "$stableRoot"
           find "$stableRoot" -mindepth 1 -depth -delete
           cp -R "$sourceRoot"/. "$stableRoot"/

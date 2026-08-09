@@ -280,6 +280,14 @@
                (cl-resilience-kit:state-store-scan-prefix store "state/") )
               :to-be
               2)
+      (expect (cl-resilience-kit:state-store-put-if-version
+               store "other/a" (list :value 4) nil)
+              :to-be
+              1)
+      (expect (length
+               (cl-resilience-kit:state-store-scan-prefix store "state/") )
+              :to-be
+              2)
       (expect (cl-resilience-kit:state-store-delete-if-version
                store "state/a" 1)
               :to-be-truthy)

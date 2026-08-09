@@ -136,6 +136,20 @@
       (expect classifier-calls :to-be 0)
       (expect (typep caught 'error) :to-be-truthy)))
 
+  (it "preserves multiple return values on the no-classifier fast path"
+    (let* ((fixture (make-test-fixture))
+           (policy (make-retry-policy)))
+      (multiple-value-bind (value marker absent)
+          (call-with-retry
+           policy
+           (lambda () (values :ok 42 nil))
+           :clock (test-fixture-clock fixture)
+           :monotonic-units-per-second +test-monotonic-units-per-second+
+           :sleeper (test-fixture-sleeper fixture))
+        (expect value :to-be :ok)
+        (expect marker :to-be 42)
+        (expect absent :to-be nil))))
+
   (it "signals structured retry exhaustion"
     (let* ((fixture (make-test-fixture))
            (exhausted nil)
@@ -250,7 +264,13 @@
         2
         :previous-delay 2)
        :to-be
-       4.0d0)))
+       4.0d0)
+      (expect
+       (compute-backoff-delay
+        (make-retry-policy :initial-delay 0 :jitter :full)
+        1)
+       :to-be
+       0d0)))
 
   (it "returns a normalized retry decision without sleeping"
     (let ((policy (make-retry-policy
