@@ -15,6 +15,8 @@
                                (lambda () (error "service failed"))))
        'error)
       (expect (circuit-breaker-state breaker) :to-be :open)
+      (expect (circuit-breaker-opened-at breaker) :to-be-truthy)
+      (expect (circuit-breaker-generation breaker) :to-be 1)
       (let ((rejected (expect-condition
                        (lambda ()
                          (circuit-breaker-call breaker (lambda () :no)))
@@ -24,6 +26,8 @@
       (advance-fixture fixture 1)
       (expect (circuit-breaker-call breaker (lambda () :ok)) :to-be :ok)
       (expect (circuit-breaker-state breaker) :to-be :closed)
+      (expect (circuit-breaker-opened-at breaker) :to-be nil)
+      (expect (circuit-breaker-generation breaker) :to-be 3)
       (expect (circuit-breaker-failure-count breaker) :to-be 0)))
 
   (it "classifies results as failures when configured"

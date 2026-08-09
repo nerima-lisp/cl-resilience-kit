@@ -54,6 +54,17 @@
       inputs.cl-nix-forge.follows = "cl-nix-forge";
       inputs.treefmt-nix.follows = "treefmt-nix";
     };
+
+    cl-observability-kit = {
+      url = "github:nerima-lisp/cl-observability-kit/c347c51dc2c79f7c79010330249492ececd7d9e6";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.cl-nix-forge.follows = "cl-nix-forge";
+      inputs.cl-concurrent-kit.follows = "cl-concurrent-kit";
+      inputs.cl-date-kit.follows = "cl-date-kit";
+      inputs.cl-boundary-kit.follows = "cl-boundary-kit";
+      inputs.cl-weave.follows = "cl-weave";
+      inputs.treefmt-nix.follows = "treefmt-nix";
+    };
   };
 
   outputs =
@@ -65,6 +76,7 @@
       cl-boundary-kit,
       cl-concurrent-kit,
       cl-date-kit,
+      cl-observability-kit,
       treefmt-nix,
       ...
     }:
@@ -120,6 +132,7 @@
         cl-boundary-kit.packages.${ctx.system}.cl-boundary-kit
         cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit
         cl-date-kit.packages.${ctx.system}.cl-date-kit
+        cl-observability-kit.packages.${ctx.system}.cl-observability-kit
       ];
 
       lispCheckDependencies = ctx: [

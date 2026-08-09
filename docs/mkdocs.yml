@@ -42,6 +42,7 @@ nav:
   - Getting started: getting-started.md
   - Guide:
       - Core concepts: guide/core-concepts.md
+      - Observability: guide/observability.md
       - Recipes: guide/recipes.md
   - Reference:
       - API: reference/api.md

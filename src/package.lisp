@@ -41,6 +41,7 @@
    #:current-resilience-context
    #:merge-resilience-context
    #:with-resilience-context
+   #:with-resilience-event-handler
    #:resilience-metrics
    #:make-resilience-metrics
    #:record-resilience-event

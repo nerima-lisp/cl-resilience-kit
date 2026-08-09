@@ -2,6 +2,7 @@
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
+                #:around-each
                 #:expect
                 #:finishes
                 #:gen-integer
@@ -41,6 +42,8 @@
                 #:circuit-breaker-active-probes
                 #:circuit-breaker-call
                 #:circuit-breaker-failure-count
+                #:circuit-breaker-generation
+                #:circuit-breaker-opened-at
                 #:circuit-open
                 #:circuit-breaker-reset
                 #:circuit-breaker-state
@@ -56,6 +59,7 @@
                 #:make-bulkhead
                 #:make-cancellation-token
                 #:make-circuit-breaker
+                #:make-resilience-event
                 #:make-resilience-executor
                 #:make-rate-limiter
                 #:make-request-coalescer
@@ -92,8 +96,15 @@
                 #:retry-policy-should-retry-p
                 #:request-coalescer-size
                 #:with-deadline
+                #:with-resilience-event-handler
                 #:with-retry
                 #:with-rate-limiter)
+  (:import-from #:cl-resilience-kit/observability
+                #:make-resilience-observability
+                #:record-resilience-event
+                #:resilience-observability-handler
+                #:resilience-observability-registry
+                #:with-resilience-observability)
   (:export #:run-tests))
 
 (in-package #:cl-resilience-kit/test)

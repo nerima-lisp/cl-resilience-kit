@@ -4,6 +4,8 @@
   (let ((handlers
           (remove nil
                   (list event-handler
+                        (and (null event-handler)
+                             *resilience-event-handler*)
                         (and metrics (resilience-metrics-handler metrics))
                         (and observer (resilience-observer-handler observer))))))
     (cond ((null handlers) nil)

@@ -147,3 +147,14 @@ tracing SDK without making the core depend on that transport."
             *resilience-context*
             (make-resilience-context ,@initargs))))
      ,@body))
+
+(defmacro with-resilience-event-handler ((handler) &body body)
+  "Bind HANDLER as the inherited event sink for BODY.
+
+HANDLER is evaluated once and may be NIL to explicitly disable inherited
+events for the dynamic extent of BODY."
+  `(let ((active-handler ,handler))
+     (when active-handler
+       (check-type active-handler function))
+     (let ((*resilience-event-handler* active-handler))
+       ,@body)))
