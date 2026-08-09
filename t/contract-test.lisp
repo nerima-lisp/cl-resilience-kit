@@ -675,6 +675,13 @@
           :key "lease-required"
           :lease-store (cl-resilience-kit:make-memory-lease-store)))
        'error)
+      (expect-condition
+       (lambda ()
+         (cl-resilience-kit:make-distributed-circuit-breaker
+          :store store
+          :key "invalid-reset-timeout"
+          :reset-timeout 0))
+       'error)
       (cl-resilience-kit:state-store-put-if-version
        store "invalid" (list :state :broken) nil)
       (let ((breaker

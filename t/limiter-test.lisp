@@ -445,6 +445,91 @@
         (signal-semaphore release)
         (join-thread holder :timeout 5))))
 
+  (it "honors an ambient deadline while waiting for queued admission"
+    (let* ((bulkhead (cl-resilience-kit:make-queued-bulkhead
+                      :limit 1 :max-queue 1))
+           (entered (make-semaphore :count 0))
+           (release (make-semaphore :count 0))
+           (holder (make-thread
+                    (lambda ()
+                      (cl-resilience-kit:queued-bulkhead-call
+                       bulkhead
+                       (lambda ()
+                         (signal-semaphore entered)
+                         (wait-on-semaphore release :timeout 5)
+                         :held)))))
+           (releaser nil))
+      (unwind-protect
+           (progn
+             (expect (wait-on-semaphore entered :timeout 5) :to-be-truthy)
+             (setf releaser
+                   (make-thread
+                    (lambda ()
+                      (sleep 0.01)
+                      (signal-semaphore release)
+                      :released)))
+             (expect
+              (call-with-deadline
+               (lambda ()
+                 (cl-resilience-kit:queued-bulkhead-call
+                  bulkhead
+                  (lambda () :ambient-deadline)))
+               :timeout 1d0)
+              :to-be
+              :ambient-deadline)
+             (expect (join-thread releaser :timeout 5) :to-be :released)
+             (expect (join-thread holder :timeout 5) :to-be :held)
+             (expect (bulkhead-in-flight bulkhead) :to-be 0)
+             (expect (cl-resilience-kit:queued-bulkhead-queue-size bulkhead)
+                     :to-be
+                     0))
+        (signal-semaphore release)
+        (join-thread holder :timeout 5)
+        (when releaser
+          (join-thread releaser :timeout 5)))))
+
+  (it "uses the earliest ambient or local queue deadline"
+    (let* ((bulkhead (cl-resilience-kit:make-queued-bulkhead
+                      :limit 1 :max-queue 1))
+           (entered (make-semaphore :count 0))
+           (release (make-semaphore :count 0))
+           (holder (make-thread
+                    (lambda ()
+                      (cl-resilience-kit:queued-bulkhead-call
+                       bulkhead
+                       (lambda ()
+                         (signal-semaphore entered)
+                         (wait-on-semaphore release :timeout 5)
+                         :held)))))
+           (rejected nil))
+      (unwind-protect
+           (progn
+             (expect (wait-on-semaphore entered :timeout 5) :to-be-truthy)
+             (setf rejected
+                   (expect-condition
+                    (lambda ()
+                      (call-with-deadline
+                       (lambda ()
+                         (cl-resilience-kit:queued-bulkhead-call
+                          bulkhead
+                          (lambda () :not-run)
+                          :timeout 0d0))
+                       :timeout 1d0))
+                    'cl-resilience-kit:resilience-execution-rejected))
+             (expect
+              (cl-resilience-kit:resilience-execution-rejected-reason
+               rejected)
+              :to-be
+              :queue-timeout)
+             (signal-semaphore release)
+             (expect (join-thread holder :timeout 5) :to-be :held)
+             (expect (bulkhead-in-flight bulkhead) :to-be 0)
+             (expect (cl-resilience-kit:queued-bulkhead-queue-size bulkhead)
+                     :to-be
+                     0))
+        (signal-semaphore release)
+        (join-thread holder :timeout 5))))
+
   (it "cancels a queued bulkhead waiter and removes its queue entry"
     (let* ((bulkhead (cl-resilience-kit:make-queued-bulkhead
                       :limit 1 :max-queue 1))

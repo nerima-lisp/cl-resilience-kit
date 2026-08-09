@@ -17,6 +17,19 @@ nix fmt
 a 120-second execution limit; the coverage check uses a 300-second limit.
 `nix build .#docs` evaluates the MkDocs site defined in `docs/mkdocs.yml`.
 
+To build the installable ASDF package and repeat the same build in place:
+
+```sh
+nix build .#cl-resilience-kit
+nix build .#cl-resilience-kit --rebuild
+```
+
+The package and test derivations compile from a stable sandbox path so SBCL's
+absolute source names in FASLs do not depend on Nix's ephemeral build
+directory. Nix supplies the dependency registry for those derivations; the
+direct test runner only discovers adjacent checkouts when `CL_SOURCE_REGISTRY`
+is unset.
+
 ## Direct SBCL checks
 
 When working outside the development shell, the repository also documents the
@@ -35,7 +48,9 @@ sbcl --script run-coverage.lisp /tmp/cl-resilience-kit-coverage
 ```
 
 The test runner rejects an empty selection. Coverage describes the selected
-test run; it is not a substitute for assertions or behavioral checks.
+test run; it is not a substitute for assertions or behavioral checks. Use
+`nix flake check --all-systems` when the change needs evaluation on every
+declared platform.
 
 ## Documentation layout
 

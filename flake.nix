@@ -126,6 +126,33 @@
         cl-weave.packages.${ctx.system}.cl-weave
       ];
 
+      # SBCL records the absolute source pathname in every FASL. Nix gives
+      # each derivation a different temporary build directory, so compiling
+      # from the default working tree makes an otherwise identical package
+      # differ byte-for-byte between builds. Compile from a stable, sandboxed
+      # path while retaining the dependency registry assembled by
+      # cl-nix-forge. The package output still contains source plus FASLs.
+      packageArgs = _: {
+        preBuild = ''
+          sourceRoot="$PWD"
+          stableRoot=/tmp/cl-resilience-kit-source-v2
+          mkdir -p -m 0777 "$stableRoot"
+          find "$stableRoot" -mindepth 1 -depth -delete
+          cp -R "$sourceRoot"/. "$stableRoot"/
+          find "$stableRoot" -mindepth 1 -type d -exec chmod a+rwx {} +
+          find "$stableRoot" -mindepth 1 -type f -exec chmod a+rw {} +
+          cd "$stableRoot"
+
+          registryValue="''${CL_SOURCE_REGISTRY:-}"
+          registrySuffix="''${registryValue#"$sourceRoot"}"
+          if [ "$registrySuffix" = "$registryValue" ]; then
+            export CL_SOURCE_REGISTRY="$PWD''${registryValue:+:$registryValue}"
+          else
+            export CL_SOURCE_REGISTRY="$PWD$registrySuffix"
+          fi
+        '';
+      };
+
       treefmt.evalModule = treefmt-nix.lib.evalModule;
 
       # Keep the generic report available to CI and to developers. The report
