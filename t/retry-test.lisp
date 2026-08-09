@@ -1,6 +1,22 @@
 (in-package #:cl-resilience-kit/test)
 
 (describe "retry policies"
+  (it-each
+      ((nil nil nil)
+       (t nil nil)
+       (t t t))
+      "requires retry safety and a positive classifier result (~S, ~S)"
+      (safe-p classifier-result expected)
+    (let ((policy (make-retry-policy
+                   :max-attempts 2
+                   :retry-safe-p safe-p
+                   :result-classifier
+                   (lambda (result attempt)
+                     (declare (ignore result attempt))
+                     classifier-result))))
+      (expect (retry-policy-should-retry-p policy 1 :result :value)
+              :to-be expected)))
+
   (it "retries classified conditions up to max-attempts"
     (let* ((fixture (make-test-fixture))
            (attempts 0)

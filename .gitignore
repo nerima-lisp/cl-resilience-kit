@@ -1,0 +1,11 @@
+# Common Lisp and ASDF build products
+*.fasl
+*.dfsl
+*.cfasl
+asdf-cache/
+coverage/
+
+# Nix and local development outputs
+.direnv/
+result
+result-*

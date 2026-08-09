@@ -81,7 +81,7 @@ that the final delay never exceeds `MAX-DELAY`.
 The classifiers may return a boolean, a numeric delay hint, a
 `RETRY-DECISION`, or two values `(retry-p delay-hint)`. A delay hint is generic
 and numeric; it is treated as a lower bound for the computed backoff and is
-still capped by `MAX-DELAY`. An HTTP adapter may translate `Retry-After` into
+still capped by `MAX-DELAY`. An HTTP integration may translate `Retry-After` into
 it, but this library does not know about HTTP response objects.
 
 Retry safety is explicit. A policy with no classifier, or with
@@ -101,7 +101,7 @@ budget token; each authorized retry does. Pass the same budget as
 `:RETRY-BUDGET` to multiple `CALL-WITH-RETRY` or `CALL-WITH-RESILIENCE` calls
 to bound aggregate retry pressure. `RETRY-BUDGET-USED`,
 `RETRY-BUDGET-REMAINING`, and `RETRY-BUDGET-ACQUIRE` expose the budget state for
-adapters and instrumentation.
+integrations and instrumentation.
 
 If a retry loop reaches a terminal resilience condition, `:FALLBACK` may be a
 function receiving that condition. Its returned values become the result of the
@@ -274,7 +274,7 @@ logical operation. Supply the individual components as keyword arguments;
 omitted components add no hidden behavior. Timeout checks remain cooperative
 and can be passed through the retry composition. An optional executor or
 hard-timeout adds an explicit execution boundary around the composed logical
-operation. Hedging and request coalescing are outer execution adapters:
+operation. Hedging and request coalescing are outer execution layers:
 coalescing joins before it runs the operation, while hedging runs multiple
 copies of the composed operation when explicitly permitted.
 
@@ -344,6 +344,8 @@ sbcl --non-interactive --no-userinit --no-sysinit \
 
 The test runner rejects an empty selection, so a zero exit status means the
 selected test events passed rather than merely that the runner started.
+The Nix test check applies a 120-second execution limit and a 10-second
+termination grace period.
 
 To generate an SB-COVER HTML and LCOV report while recompiling the project
 from source, pass an output directory (or omit it to use `coverage/`):
@@ -353,6 +355,8 @@ sbcl --script run-coverage.lisp /tmp/cl-resilience-kit-coverage
 ```
 
 The report is scoped to `src/`; dependency and test files are not counted.
+The Nix coverage check applies a 300-second execution limit and the same
+10-second termination grace period.
 The coverage report is evidence for the selected test run, not a substitute
 for exercising platform-specific backends or caller-owned operation
 semantics.

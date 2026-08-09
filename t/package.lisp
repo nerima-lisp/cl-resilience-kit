@@ -8,6 +8,7 @@
                 #:gen-member
                 #:it
                 #:it-concurrent
+                #:it-each
                 #:it-property
                 #:signals
                 #:results-status

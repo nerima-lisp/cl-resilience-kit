@@ -73,6 +73,9 @@
         "x86_64-linux"
         "aarch64-darwin"
       ];
+      testTimeoutSeconds = 120;
+      coverageTimeoutSeconds = 300;
+      terminationGraceSeconds = 10;
       cl = cl-nix-forge.lib.${nixpkgs.lib.head systems};
       meta = {
         description = "Composable, dependency-neutral resilience primitives for Common Lisp";
@@ -90,6 +93,8 @@
       pname = "cl-resilience-kit";
       asd = ./cl-resilience-kit.asd;
       root = ./.;
+      timeoutSeconds = testTimeoutSeconds;
+      killAfterSeconds = terminationGraceSeconds;
 
       lispDependencies = ctx: [
         cl-boundary-kit.packages.${ctx.system}.cl-boundary-kit
@@ -106,8 +111,16 @@
       # uses this system's own test operation and never treats an empty test
       # selection as success because t/runner.lisp rejects one.
       extraOutputs = ctx: {
-        packages.coverage = ctx.cl.mkCoverageReport { drv = ctx.package; };
-        checks.coverage = ctx.cl.mkCoverageReport { drv = ctx.package; };
+        packages.coverage = ctx.cl.mkCoverageReport {
+          drv = ctx.package;
+          timeoutSeconds = coverageTimeoutSeconds;
+          killAfterSeconds = terminationGraceSeconds;
+        };
+        checks.coverage = ctx.cl.mkCoverageReport {
+          drv = ctx.package;
+          timeoutSeconds = coverageTimeoutSeconds;
+          killAfterSeconds = terminationGraceSeconds;
+        };
       };
     };
 }

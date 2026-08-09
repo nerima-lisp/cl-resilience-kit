@@ -67,7 +67,6 @@
    #:memory-lease-store
    #:make-memory-lease-store
    #:resilience-lease
-   #:resilience-lease-store
    #:resilience-lease-key
    #:resilience-lease-owner
    #:resilience-lease-fencing-token
