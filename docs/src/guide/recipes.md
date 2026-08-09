@@ -160,20 +160,20 @@ among callers. Protect the operation with a safety declaration or an
 idempotency identity:
 
 ```common-lisp
-(call-with-hedging
- #'fetch-order
- :executor executor
- :hedge-after 0.05d0
- :max-attempts 2
- :hedge-safe-p t
- :operation :fetch-order)
+(with-hedging
+    (:executor executor
+     :hedge-after 0.05d0
+     :max-attempts 2
+     :hedge-safe-p t
+     :operation :fetch-order)
+  (fetch-order))
 
-(call-with-request-coalescing
- coalescer
- #'fetch-order
- :key "order-42"
- :idempotency-fingerprint "orders-v1"
- :operation :fetch-order)
+(with-request-coalescing
+    (coalescer
+     :key "order-42"
+     :idempotency-fingerprint "orders-v1"
+     :operation :fetch-order)
+  (fetch-order))
 ```
 
 Hedging does not forcefully cancel loser work. Request coalescing is

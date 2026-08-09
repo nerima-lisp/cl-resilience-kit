@@ -1,5 +1,49 @@
 (in-package #:cl-resilience-kit/test)
 
+(defclass controlled-conflict-state-store
+    (cl-resilience-kit:resilience-state-store)
+  ((delegate
+    :initarg :delegate
+    :reader controlled-conflict-state-store-delegate)
+   (remaining-conflicts
+    :initarg :remaining-conflicts
+    :accessor controlled-conflict-state-store-remaining-conflicts)))
+
+(defmethod cl-resilience-kit:state-store-get
+    ((store controlled-conflict-state-store) key)
+  (cl-resilience-kit:state-store-get
+   (controlled-conflict-state-store-delegate store)
+   key))
+
+(defmethod cl-resilience-kit:state-store-put-if-version
+    ((store controlled-conflict-state-store) key value expected-version)
+  (if (plusp (controlled-conflict-state-store-remaining-conflicts store))
+      (progn
+        (decf (controlled-conflict-state-store-remaining-conflicts store))
+        (error 'cl-resilience-kit:resilience-store-conflict
+               :key key
+               :expected-version expected-version
+               :actual-version expected-version))
+      (cl-resilience-kit:state-store-put-if-version
+       (controlled-conflict-state-store-delegate store)
+       key
+       value
+       expected-version)))
+
+(defun seed-distributed-state
+    (store key &key (state :closed) (failure-count 0) opened-at
+          (active-probes 0) (half-open-successes 0) (generation 0))
+  (cl-resilience-kit:state-store-put-if-version
+   store
+   key
+   (list :state state
+         :failure-count failure-count
+         :opened-at opened-at
+         :active-probes active-probes
+         :half-open-successes half-open-successes
+         :generation generation)
+   nil))
+
 (describe "public contracts"
   (it "records metrics and isolates observer failures"
     (let* ((metrics (cl-resilience-kit:make-resilience-metrics))
@@ -308,6 +352,33 @@
               :to-be
               2)))
 
+  (it "supports block macros for execution boundaries"
+    (expect
+     (cl-resilience-kit:with-hedging
+         (:max-attempts 1 :operation :macro-hedge)
+       :hedged)
+     :to-be
+     :hedged)
+    (let ((coalescer (cl-resilience-kit:make-request-coalescer)))
+      (expect
+       (cl-resilience-kit:with-request-coalescing
+           (coalescer :key "macro-key" :operation :macro-coalesce)
+         :coalesced)
+       :to-be
+       :coalesced)
+      (expect (cl-resilience-kit:request-coalescer-size coalescer)
+              :to-be
+              0))
+    (let ((executor (cl-resilience-kit:make-resilience-executor :size 1)))
+      (unwind-protect
+           (expect
+            (cl-resilience-kit:with-resilience-executor
+                (executor :timeout 1d0 :operation :macro-executor)
+              :executed)
+            :to-be
+            :executed)
+        (cl-resilience-kit:resilience-executor-shutdown executor :wait t))))
+
   (it "normalizes classifier retry decisions"
     (let ((policy
             (cl-resilience-kit:make-retry-policy
@@ -332,6 +403,67 @@
         (expect (cl-resilience-kit:retry-decision-reason decision)
                 :to-be
                 :transient))))
+
+  (it "validates retry policy inputs and classifier boundaries"
+    (dolist (arguments '((:max-attempts 0)
+                         (:initial-delay -1)
+                         (:multiplier 0)
+                         (:max-delay -1)
+                         (:jitter :unknown)))
+      (expect-condition
+       (lambda ()
+         (apply #'cl-resilience-kit:make-retry-policy arguments))
+       'error))
+    (let ((policy (cl-resilience-kit:make-retry-policy)))
+      (multiple-value-bind (retry-p decision)
+          (cl-resilience-kit:retry-policy-should-retry-p
+           policy 1 :condition (make-condition 'error))
+        (expect retry-p :to-be nil)
+        (expect (cl-resilience-kit:retry-decision-reason decision)
+                :to-be
+                :not-retry-safe))
+      (expect-condition
+       (lambda ()
+         (cl-resilience-kit:retry-policy-should-retry-p
+          policy 0 :result :ok))
+       'error)
+      (expect-condition
+       (lambda ()
+         (cl-resilience-kit:retry-policy-should-retry-p policy 1))
+       'error))
+    (let ((policy
+            (cl-resilience-kit:make-retry-policy
+             :max-attempts 2
+             :retry-safe-p t)))
+      (multiple-value-bind (retry-p decision)
+          (cl-resilience-kit:retry-policy-should-retry-p
+           policy 1 :result nil)
+        (expect retry-p :to-be nil)
+        (expect (cl-resilience-kit:retry-decision-reason decision)
+                :to-be
+                :no-classifier)))
+    (let ((policy
+            (cl-resilience-kit:make-retry-policy
+             :max-attempts 2
+             :retry-safe-p t
+             :result-classifier
+             (lambda (result attempt)
+               (declare (ignore attempt))
+               (if (eq result :retryable) 2 nil)))))
+      (multiple-value-bind (retry-p decision)
+          (cl-resilience-kit:retry-policy-should-retry-p
+           policy 1 :result :retryable)
+        (expect retry-p :to-be-truthy)
+        (expect (cl-resilience-kit:retry-decision-delay-hint decision)
+                :to-be
+                2))
+      (expect (cl-resilience-kit:compute-backoff-delay
+               (cl-resilience-kit:make-retry-policy
+                :initial-delay 3
+                :multiplier 1)
+               100)
+              :to-be
+              3d0)))
 
   (it "enforces compare-and-set and lease renewal boundaries"
     (let ((store (cl-resilience-kit:make-memory-state-store)))
@@ -813,6 +945,133 @@
            (lambda ()
              (cl-resilience-kit:distributed-circuit-breaker-state breaker))
            'cl-resilience-kit:resilience-store-error)))))
+
+  (it "surfaces distributed state-store initialization failure"
+    (let ((store
+            (make-instance
+             'controlled-conflict-state-store
+             :delegate (cl-resilience-kit:make-memory-state-store)
+             :remaining-conflicts 65)))
+      (let ((breaker
+              (cl-resilience-kit:make-distributed-circuit-breaker
+               :store store
+               :key "initialization-conflicts")))
+        (expect-condition
+         (lambda ()
+           (cl-resilience-kit:distributed-circuit-breaker-call
+            breaker (lambda () :unreachable)))
+         'cl-resilience-kit:resilience-store-error))))
+
+  (it "rejects calls while all distributed half-open probes are active"
+    (let* ((store (cl-resilience-kit:make-memory-state-store))
+           (key "half-open-probe-limit")
+           (breaker
+             (cl-resilience-kit:make-distributed-circuit-breaker
+              :store store
+              :key key
+              :half-open-probe-limit 1)))
+      (seed-distributed-state
+       store key
+       :state :half-open
+       :active-probes 1
+       :generation 7)
+      (let ((rejection
+              (expect-condition
+               (lambda ()
+                 (cl-resilience-kit:distributed-circuit-breaker-call
+                  breaker (lambda () :unreachable) :operation :probe))
+               'cl-resilience-kit:circuit-open)))
+        (expect (cl-resilience-kit:circuit-open-state rejection)
+                :to-be
+                :half-open))))
+
+  (it "retries fenced distributed transitions after CAS conflicts"
+    (let* ((delegate (cl-resilience-kit:make-memory-state-store))
+           (key "open-transition-conflict")
+           (fixture (make-test-fixture :start 1))
+           (store
+             (make-instance
+              'controlled-conflict-state-store
+              :delegate delegate
+              :remaining-conflicts 1))
+           (breaker
+             (cl-resilience-kit:make-distributed-circuit-breaker
+              :store store
+              :key key
+              :reset-timeout 1
+              :clock (test-fixture-clock fixture)
+              :monotonic-units-per-second
+              +test-monotonic-units-per-second+)))
+      (seed-distributed-state
+       delegate key :state :open :opened-at 0 :generation 3)
+      (expect (cl-resilience-kit:distributed-circuit-breaker-call
+               breaker (lambda () :recovered))
+              :to-be
+              :recovered)
+      (expect (controlled-conflict-state-store-remaining-conflicts store)
+              :to-be
+              0)
+      (expect (cl-resilience-kit:distributed-circuit-breaker-state breaker)
+              :to-be
+              :closed)
+      (expect (cl-resilience-kit:distributed-circuit-breaker-generation breaker)
+              :to-be
+              5)))
+
+  (it "ignores stale distributed completion tokens"
+    (let ((store (cl-resilience-kit:make-memory-state-store)))
+      (dolist (entry '((:generation . 99) (:state . :open)))
+        (let* ((field (car entry))
+               (value (cdr entry))
+               (key (format nil "stale-token-~A" field))
+               (breaker
+                 (cl-resilience-kit:make-distributed-circuit-breaker
+                  :store store
+                  :key key)))
+          (seed-distributed-state store key)
+          (expect
+           (cl-resilience-kit:distributed-circuit-breaker-call
+            breaker
+            (lambda ()
+              (multiple-value-bind (state version)
+                  (cl-resilience-kit:state-store-get store key)
+                (setf (getf state field) value)
+                (when (eq field :state)
+                  (setf (getf state :opened-at) 0))
+                (cl-resilience-kit:state-store-put-if-version
+                 store key state version)
+                :stale)))
+           :to-be
+           :stale)
+          (expect (cl-resilience-kit:distributed-circuit-breaker-state breaker)
+                  :to-be
+                  (if (eq field :state) :open :closed))))))
+
+  (it "records a failure after completion CAS exhaustion"
+    (let* ((delegate (cl-resilience-kit:make-memory-state-store))
+           (key "completion-conflicts")
+           (store
+             (make-instance
+              'controlled-conflict-state-store
+              :delegate delegate
+              :remaining-conflicts 64))
+           (breaker
+             (cl-resilience-kit:make-distributed-circuit-breaker
+              :store store
+              :key key
+              :failure-threshold 1)))
+      (seed-distributed-state delegate key)
+      (expect-condition
+       (lambda ()
+         (cl-resilience-kit:distributed-circuit-breaker-call
+          breaker (lambda () :completion-failure)))
+       'cl-resilience-kit:resilience-store-error)
+      (expect (controlled-conflict-state-store-remaining-conflicts store)
+              :to-be
+              0)
+      (expect (cl-resilience-kit:distributed-circuit-breaker-state breaker)
+              :to-be
+              :open)))
 
   (it "executes leased distributed calls exactly once"
     (let* ((store (cl-resilience-kit:make-memory-state-store))

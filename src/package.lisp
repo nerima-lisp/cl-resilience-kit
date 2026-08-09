@@ -221,12 +221,15 @@
    #:resilience-executor-try-submit
    #:resilience-executor-submit
    #:resilience-executor-call
+   #:with-resilience-executor
    #:resilience-executor-shutdown
    #:call-with-hedging
+   #:with-hedging
    #:request-coalescer
    #:make-request-coalescer
    #:request-coalescer-size
    #:call-with-request-coalescing
+   #:with-request-coalescing
    #:call-with-resilience
    #:with-resilience
 

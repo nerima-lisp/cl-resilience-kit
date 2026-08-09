@@ -76,6 +76,25 @@
       testTimeoutSeconds = 120;
       coverageTimeoutSeconds = 300;
       terminationGraceSeconds = 10;
+      coverageEntryPointText = ''
+        (load "run-tests.lisp")
+        (let* ((root (uiop:ensure-directory-pathname (uiop:getcwd)))
+               (source-root (merge-pathnames "src/" root))
+               (table (sb-cover::code-coverage-hashtable))
+               (discarded-files nil))
+          (maphash
+           (lambda (file coverage)
+             (declare (ignore coverage))
+             (let ((source (pathname file)))
+               (unless (and (uiop:subpathp source source-root)
+                            (not (member (file-namestring source)
+                                         '("conditions.lisp" "package.lisp")
+                                         :test #'string-equal)))
+                 (push file discarded-files))))
+           table)
+          (dolist (file discarded-files)
+            (remhash file table)))
+      '';
       cl = cl-nix-forge.lib.${nixpkgs.lib.head systems};
       meta = {
         description = "Composable, dependency-neutral resilience primitives for Common Lisp";
@@ -115,11 +134,13 @@
       extraOutputs = ctx: {
         packages.coverage = ctx.cl.mkCoverageReport {
           drv = ctx.package;
+          entryPointText = coverageEntryPointText;
           timeoutSeconds = coverageTimeoutSeconds;
           killAfterSeconds = terminationGraceSeconds;
         };
         checks.coverage = ctx.cl.mkCoverageReport {
           drv = ctx.package;
+          entryPointText = coverageEntryPointText;
           timeoutSeconds = coverageTimeoutSeconds;
           killAfterSeconds = terminationGraceSeconds;
         };

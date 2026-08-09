@@ -466,6 +466,31 @@
       (expect (typep (retry-classifier-error-cause caught) 'error)
               :to-be-truthy)))
 
+  (it "applies numeric result classifier delay hints during execution"
+    (let* ((fixture (make-test-fixture))
+           (attempts 0)
+           (policy (make-retry-policy
+                    :max-attempts 2
+                    :initial-delay 1
+                    :retry-safe-p t
+                    :result-classifier
+                    (lambda (result attempt)
+                      (declare (ignore result))
+                      (when (= attempt 1) 5)))))
+      (expect
+       (call-with-retry
+        policy
+        (lambda ()
+          (incf attempts)
+          (if (= attempts 1) :retryable :ok))
+        :clock (test-fixture-clock fixture)
+        :monotonic-units-per-second +test-monotonic-units-per-second+
+        :sleeper (test-fixture-sleeper fixture))
+       :to-be
+       :ok)
+      (expect (fixture-sleeps fixture) :to-equal '(5.0d0))
+      (expect attempts :to-be 2)))
+
   (it "keeps exponential backoff finite under numeric overflow pressure"
     (let ((policy (make-retry-policy
                    :initial-delay 1

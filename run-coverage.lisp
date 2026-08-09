@@ -18,7 +18,6 @@
        (:tree ,(merge-pathnames "../cl-boundary-kit/" root))
        (:tree ,(merge-pathnames "../cl-concurrent-kit/" root))
        (:tree ,(merge-pathnames "../cl-date-kit/" root))
-       (:tree ,(merge-pathnames "../cl-host-kit/" root))
        (:tree ,(merge-pathnames "../cl-weave/" root))
        :inherit-configuration)))
 
@@ -55,19 +54,28 @@
     (uiop:subpathp (uiop:parse-native-namestring file)
                    (merge-pathnames "src/" root)))
 
+  (defun declaration-only-source-p (file)
+    (member (file-namestring file)
+            '("conditions.lisp" "package.lisp")
+            :test #'string=))
+
+  (defun eligible-source-p (file root)
+    (and (project-source-p file root)
+         (not (declaration-only-source-p file))))
+
   (defun discard-ineligible-coverage-records (root)
     "Keep only this project's executable source records for LCOV.
 
 SB-COVER:REPORT accepts a pathname filter, but SB-COVER:LCOV-REPORT walks
 the complete coverage table.  Dependency records and declaration-only
-PACKAGE.LISP records can therefore contain no source-location vector and
-make LCOV generation fail even after the selected tests pass."
+PACKAGE.LISP and CONDITIONS.LISP records can therefore contain no
+source-location vector and make LCOV generation fail even after the selected
+tests pass."
     (let ((table (sb-cover::code-coverage-hashtable))
           (discarded-files nil))
       (maphash (lambda (file coverage)
                  (declare (ignore coverage))
-                 (unless (and (project-source-p file root)
-                              (string/= (file-namestring file) "package.lisp"))
+                 (unless (eligible-source-p file root)
                    (push file discarded-files)))
                table)
       (dolist (file discarded-files)
@@ -92,7 +100,7 @@ make LCOV generation fail even after the selected tests pass."
            (discard-ineligible-coverage-records root)
            (sb-cover:report (merge-pathnames "html/" output)
                             :if-matches (lambda (file)
-                                          (project-source-p file root)))
+                                          (eligible-source-p file root)))
            (sb-cover:lcov-report (merge-pathnames "lcov.info" output))
            (format t "Coverage reports written to ~A~%" output))
       ;; A failed test run must not leave coverage instrumentation enabled in

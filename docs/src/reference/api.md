@@ -40,9 +40,12 @@ policy's `max-attempts` includes the initial invocation.
 | --- | --- |
 | `make-resilience-executor (&key size name queue-capacity)` | Create a bounded worker executor. |
 | `resilience-executor-call (executor thunk &key hard-timeout timeout operation clock monotonic-units-per-second)` | Wait for a worker result with caller and best-effort worker limits. |
+| `with-resilience-executor (executor-options &body body)` | Evaluate a block on a resilience executor. |
 | `call-with-hedging (thunk &key hedge-after max-attempts executor hard-timeout hedge-safe-p idempotency-key cancellation-token operation clock monotonic-units-per-second)` | Start explicitly safe speculative attempts. |
+| `with-hedging (options &body body)` | Evaluate a block through the hedging boundary. |
 | `make-request-coalescer ()` | Create a process-local request coalescer. |
 | `call-with-request-coalescing (coalescer thunk &key key idempotency-fingerprint executor hard-timeout timeout operation clock monotonic-units-per-second)` | Share one in-flight result for a key. |
+| `with-request-coalescing (coalescer-options &body body)` | Evaluate a block through the coalescing boundary. |
 
 Hedging requires `hedge-safe-p` or an idempotency key when more than one
 attempt is allowed. Coalescing requires a key and treats conflicting

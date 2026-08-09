@@ -153,6 +153,14 @@ constraints."
      :operation operation
      :timeout-backend :executor-wait)))
 
+(defmacro with-resilience-executor ((executor &rest options) &body body)
+  "Evaluate BODY through RESILIENCE-EXECUTOR-CALL.
+
+EXECUTOR is evaluated once.  OPTIONS are the keyword arguments accepted by
+RESILIENCE-EXECUTOR-CALL."
+  `(resilience-executor-call
+    ,executor (lambda () ,@body) ,@options))
+
 (defun resilience-executor-shutdown
     (executor &key wait cancel-pending timeout)
   (check-type executor resilience-executor)

@@ -80,6 +80,14 @@ Loser attempts are not forcefully cancelled by the underlying promise API."
                    :operation operation
                    :message "All hedge attempts failed."
                    :causes (append (nreverse causes)
-                                   (cl-concurrent-kit:promise-all-failed-causes
+                   (cl-concurrent-kit:promise-all-failed-causes
                                     condition))
                    :attempts max-attempts)))))))
+
+(defmacro with-hedging ((&rest options) &body body)
+  "Evaluate BODY through CALL-WITH-HEDGING.
+
+OPTIONS are the keyword arguments accepted by CALL-WITH-HEDGING.  The
+macro keeps the operation in a continuation-shaped thunk while making the
+common block form explicit at the call site."
+  `(call-with-hedging (lambda () ,@body) ,@options))

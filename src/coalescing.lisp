@@ -107,3 +107,11 @@ signals IDempotency-CONFLICT instead of joining an ambiguous operation."
        promise timeout
        :operation operation
        :timeout-backend :coalescer-wait))))
+
+(defmacro with-request-coalescing ((coalescer &rest options) &body body)
+  "Evaluate BODY through CALL-WITH-REQUEST-COALESCING.
+
+COALESCER is evaluated once.  OPTIONS are the keyword arguments accepted by
+CALL-WITH-REQUEST-COALESCING."
+  `(call-with-request-coalescing
+    ,coalescer (lambda () ,@body) ,@options))
