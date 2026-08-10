@@ -30,6 +30,8 @@
                (:file "retry")
                (:file "retry-execution-boundaries")
                (:file "retry-execution")
+               (:file "circuit-breaker-definition")
+               (:file "circuit-breaker-state")
                (:file "circuit-breaker")
                (:file "distributed-circuit-breaker-definition")
                (:file "distributed-circuit-breaker-state")
