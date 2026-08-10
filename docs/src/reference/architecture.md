@@ -8,9 +8,9 @@
 | Data validation | `src/data-validation.lisp` | Shared predicates for validating finite, proper input data. |
 | Context and observation | `src/context.lisp`, `src/events.lisp` | Operation metadata, metrics, and event fan-out. |
 | Time and cancellation | `src/deadline.lisp`, `src/cancellation.lisp` | Cooperative deadlines, cancellation, and injected monotonic time. |
-| Retry | `src/retry-policy.lisp`, `src/retry-execution.lisp`, `src/retry.lisp`, `src/retry-budget.lisp` | Classification, backoff, attempt execution, and budgets. |
-| Breakers and stores | `src/circuit-breaker.lisp`, `src/distributed-circuit-breaker.lisp`, `src/state-store.lisp`, `src/lease-store.lisp` | Local state machines and explicit distributed storage contracts. |
-| Admission | `src/bulkhead.lisp`, `src/rate-limiter.lisp` | Concurrency and token admission. |
+| Retry | `src/retry-policy.lisp`, `src/retry-execution-boundaries.lisp`, `src/retry-execution.lisp`, `src/retry.lisp`, `src/retry-budget.lisp` | Classification, backoff, attempt-boundary helpers, attempt execution, and budgets. |
+| Breakers and stores | `src/circuit-breaker-definition.lisp`, `src/circuit-breaker-state.lisp`, `src/circuit-breaker.lisp`, `src/distributed-circuit-breaker-definition.lisp`, `src/distributed-circuit-breaker-state.lisp`, `src/distributed-circuit-breaker-transition.lisp`, `src/distributed-circuit-breaker-execution.lisp`, `src/distributed-circuit-breaker-api.lisp`, `src/state-store.lisp`, `src/lease-store.lisp` | Breaker class and accessors, state transitions, the public call/reset API, and the distributed breaker's class, state, transition, execution, and public API layers. |
+| Admission | `src/bulkhead-definition.lisp`, `src/bulkhead-execution.lisp`, `src/bulkhead.lisp`, `src/rate-limiter.lisp` | Bulkhead classes, call execution, the public macro API, and token admission. |
 | Execution | `src/executor.lisp`, `src/hedging.lisp`, `src/coalescing.lisp` | Worker boundaries, speculative attempts, and request sharing. |
 | Lifecycle and composition | `src/lifecycle.lisp`, `src/composition-core.lisp`, `src/composition-plan.lisp`, `src/composition-support.lisp`, `src/composition-runtime.lisp`, `src/composition.lisp`, `src/composition-macros.lisp` | Shutdown readiness, plan data, primitive composition, execution-boundary selection, event-handler assembly, and macro/CPS entry points. |
 
