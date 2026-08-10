@@ -1,5 +1,12 @@
 (in-package #:cl-resilience-kit)
 
+(defun %deliver-coalesced-error (promise condition)
+  "Deliver CONDITION unless another path has already settled PROMISE."
+  (handler-case
+      (cl-concurrent-kit:deliver-error promise condition)
+    (cl-concurrent-kit:promise-already-fulfilled ()
+      nil)))
+
 (defclass request-coalescer ()
   ((lock
     :initform (cl-concurrent-kit:make-lock
@@ -81,11 +88,13 @@ signals IDempotency-CONFLICT instead of joining an ambiguous operation."
                                (setf settled-p t))
                            (control-error (condition)
                              (declare (ignore condition)))
+                           (cl-concurrent-kit:promise-already-fulfilled ()
+                             (setf settled-p t))
                            (error (condition)
-                             (cl-concurrent-kit:deliver-error promise condition)
+                             (%deliver-coalesced-error promise condition)
                              (setf settled-p t)))
                       (unless settled-p
-                        (cl-concurrent-kit:deliver-error
+                        (%deliver-coalesced-error
                          promise
                          (make-condition
                           'resilience-error
@@ -102,7 +111,7 @@ signals IDempotency-CONFLICT instead of joining an ambiguous operation."
                   (cl-concurrent-kit:future (funcall worker)))
             (error (condition)
               (%remove-coalesced-request coalescer key promise)
-              (cl-concurrent-kit:deliver-error promise condition)))))
+              (%deliver-coalesced-error promise condition)))))
       (%await-resilience-promise
        promise timeout
        :operation operation

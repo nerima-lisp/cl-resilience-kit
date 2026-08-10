@@ -22,7 +22,7 @@
          :message message))
 
 (defun %distributed-circuit-breaker-normalize-state (breaker value)
-  (unless (listp value)
+  (unless (%proper-list-p value)
     (%distributed-circuit-breaker-store-error
      breaker "The distributed circuit-breaker state is not a property list."
      value))

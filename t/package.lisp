@@ -6,6 +6,7 @@
                 #:expect
                 #:finishes
                 #:gen-integer
+                #:gen-list
                 #:gen-member
                 #:it
                 #:it-concurrent

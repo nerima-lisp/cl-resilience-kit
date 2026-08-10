@@ -91,8 +91,9 @@ store is not sufficient for this contract."
    (%retry-budget-monotonic-units-per-second budget)))
 
 (defun %distributed-retry-budget-state (budget value now)
-  (let ((window-start (and (listp value) (getf value :window-start)))
-        (used (and (listp value) (getf value :used))))
+  (let ((window-start (and (%proper-list-p value)
+                           (getf value :window-start)))
+        (used (and (%proper-list-p value) (getf value :used))))
     (if (and (%finite-real-p window-start)
              (integerp used)
              (>= used 0))
