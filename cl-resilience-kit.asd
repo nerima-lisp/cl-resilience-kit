@@ -28,6 +28,7 @@
                (:file "retry-policy")
                (:file "retry-budget")
                (:file "retry")
+               (:file "retry-execution-boundaries")
                (:file "retry-execution")
                (:file "circuit-breaker")
                (:file "distributed-circuit-breaker-definition")
