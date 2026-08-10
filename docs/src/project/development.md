@@ -24,11 +24,12 @@ nix build .#cl-resilience-kit
 nix build .#cl-resilience-kit --rebuild
 ```
 
-The package and test derivations compile from a stable sandbox path so SBCL's
-absolute source names in FASLs do not depend on Nix's ephemeral build
-directory. Nix supplies the dependency registry for those derivations; the
-direct test runner only discovers adjacent checkouts when `CL_SOURCE_REGISTRY`
-is unset.
+The package and test derivations compile from a build-private writable path so
+SBCL's absolute source names in FASLs do not depend on Nix's ephemeral build
+directory or collide with another derivation. Nix supplies the dependency
+registry for those derivations. The direct test and coverage runners load
+`scripts/bootstrap.lisp`, which registers the project and available adjacent
+NERIMA checkouts for local development.
 
 ## Direct SBCL checks
 
@@ -47,10 +48,10 @@ default:
 sbcl --script run-coverage.lisp /tmp/cl-resilience-kit-coverage
 ```
 
-The test runner rejects an empty selection. Coverage describes the selected
-test run; it is not a substitute for assertions or behavioral checks. Use
-`nix flake check --all-systems` when the change needs evaluation on every
-declared platform.
+The test runner rejects an empty selection and reports the number of selected
+tests and result events. Coverage describes the selected test run; it is not a
+substitute for assertions or behavioral checks. Use `nix flake check
+--all-systems` when the change needs evaluation on every declared platform.
 
 ## Documentation layout
 

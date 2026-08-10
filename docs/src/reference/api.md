@@ -122,6 +122,20 @@ data.
       idempotency-fingerprint)
 ```
 
+The macro and continuation entry points keep the same option vocabulary:
+
+| Entry point | Purpose |
+| --- | --- |
+| `with-resilience ((&rest options) &body body)` | Evaluate `body` through `call-with-resilience`. |
+| `call-with-resilience/k (thunk on-success on-error &rest options)` | Dispatch every successful value to `on-success`, or one signaled `error` condition to `on-error`. |
+| `with-resilience/k ((on-success on-error &rest options) &body body)` | Macro wrapper for the continuation boundary. |
+
+`with-resilience` and `with-resilience/k` validate literal option lists during
+macro expansion. Options must be keyword/value pairs from the composition
+signature, and duplicate keys are rejected. `call-with-resilience/k` keeps
+continuation failures visible: an error raised by either callback escapes the
+boundary instead of being sent to the other callback.
+
 The composition helper propagates the selected operation, context, time, and
 event boundaries to the nested controls. Read [Core concepts](../guide/core-concepts.md)
 before changing the order of controls for a production operation.

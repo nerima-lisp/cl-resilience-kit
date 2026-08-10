@@ -77,7 +77,9 @@ Pin the flake in a consuming project:
   baggage fields;
 - structured events, metrics, observers, lifecycle draining, and health
   registries;
-- explicit composition through `call-with-resilience` and `with-resilience`.
+- explicit composition through `call-with-resilience`, `with-resilience`, and
+  continuation-oriented `call-with-resilience/k` / `with-resilience/k` APIs;
+  the latter preserve multiple values and keep callback failures visible.
 
 There is no process-global breaker, limiter, timer, or worker thread.
 Clocks, random sources, sleepers, cancellation tokens, event handlers, state
