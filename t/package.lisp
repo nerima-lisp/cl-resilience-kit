@@ -3,6 +3,7 @@
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
                 #:around-each
+                #:collect-test-plan
                 #:expect
                 #:finishes
                 #:gen-integer

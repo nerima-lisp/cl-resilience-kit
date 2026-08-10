@@ -1,6 +1,12 @@
 (progn
   #.(progn (require :asdf) (require :sb-cover) nil)
 
+  (eval-when (:compile-toplevel :load-toplevel :execute)
+    (load (merge-pathnames
+           "scripts/bootstrap.lisp"
+           (uiop:pathname-directory-pathname
+            (or *load-truename* *compile-file-truename*)))))
+
   (defun script-directory ()
     (make-pathname :name nil
                    :type nil
@@ -10,16 +16,6 @@
 
   (defun project-root ()
     (uiop:ensure-directory-pathname (script-directory)))
-
-  (defun configure-local-source-registry (root)
-    (asdf:initialize-source-registry
-     `(:source-registry
-       (:tree ,root)
-       (:tree ,(merge-pathnames "../cl-boundary-kit/" root))
-       (:tree ,(merge-pathnames "../cl-concurrent-kit/" root))
-       (:tree ,(merge-pathnames "../cl-date-kit/" root))
-       (:tree ,(merge-pathnames "../cl-weave/" root))
-       :inherit-configuration)))
 
   (defun coverage-arguments ()
     (remove "--" (uiop:command-line-arguments) :test #'string=))
@@ -109,6 +105,6 @@ tests pass."
 
   (let* ((root (project-root))
          (output (output-directory root)))
-    (configure-local-source-registry root)
+    (bootstrap-cl-resilience-kit root)
     (configure-isolated-output-cache output)
     (run-coverage root output)))

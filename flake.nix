@@ -132,29 +132,28 @@
         cl-boundary-kit.packages.${ctx.system}.cl-boundary-kit
         cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit
         cl-date-kit.packages.${ctx.system}.cl-date-kit
-        cl-observability-kit.packages.${ctx.system}.cl-observability-kit
       ];
 
       lispCheckDependencies = ctx: [
+        cl-observability-kit.packages.${ctx.system}.cl-observability-kit
         cl-weave.packages.${ctx.system}.cl-weave
       ];
 
       # SBCL records the absolute source pathname in every FASL. Nix gives
-      # each derivation a different temporary build directory, so compiling
-      # from the default working tree makes an otherwise identical package
-      # differ byte-for-byte between builds. Compile from a stable, sandboxed
-      # path while retaining the dependency registry assembled by
-      # cl-nix-forge. The package output still contains source plus FASLs.
+      # each derivation a different temporary build directory. Compile from a
+      # writable path private to this build so concurrent derivations cannot
+      # delete or chmod each other's source while retaining the dependency
+      # registry assembled by cl-nix-forge. The package output still contains
+      # source plus FASLs.
       packageArgs = _: {
         preBuild = ''
           sourceRoot="$PWD"
-          stableRoot="/tmp/cl-resilience-kit-source-v2-$name"
-          mkdir -p -m 0777 "$stableRoot"
-          find "$stableRoot" -mindepth 1 -depth -delete
-          cp -R "$sourceRoot"/. "$stableRoot"/
-          find "$stableRoot" -mindepth 1 -type d -exec chmod a+rwx {} +
-          find "$stableRoot" -mindepth 1 -type f -exec chmod a+rw {} +
-          cd "$stableRoot"
+          buildRoot="$TMPDIR/cl-resilience-kit-source-$name"
+          mkdir -p -m 0700 "$buildRoot"
+          find "$buildRoot" -mindepth 1 -depth -delete
+          cp -R --no-preserve=mode "$sourceRoot"/. "$buildRoot"/
+          chmod -R u+rwX "$buildRoot"
+          cd "$buildRoot"
 
           registryValue="''${CL_SOURCE_REGISTRY:-}"
           registrySuffix="''${registryValue#"$sourceRoot"}"

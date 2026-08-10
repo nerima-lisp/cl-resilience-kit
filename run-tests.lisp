@@ -1,13 +1,11 @@
 (require :asdf)
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (load (merge-pathnames
+         "scripts/bootstrap.lisp"
+         (uiop:pathname-directory-pathname
+          (or *load-truename* *compile-file-truename*)))))
+
 (let ((root (uiop:pathname-directory-pathname *load-truename*)))
-  (pushnew root asdf:*central-registry* :test #'equal)
-  (unless (uiop:getenv "CL_SOURCE_REGISTRY")
-    (dolist (directory
-              (list (merge-pathnames "../cl-boundary-kit/" root)
-                    (merge-pathnames "../cl-concurrent-kit/" root)
-                    (merge-pathnames "../cl-date-kit/" root)
-                    (merge-pathnames "../cl-weave/" root)))
-      (when (uiop:directory-exists-p directory)
-        (pushnew directory asdf:*central-registry* :test #'equal))))
+  (bootstrap-cl-resilience-kit root)
   (asdf:test-system "cl-resilience-kit/test"))
