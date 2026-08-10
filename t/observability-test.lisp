@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit/test)
+(in-package #:cl-resilience-kit/observability-test)
 
 (defun %observability-metric (registry name)
   (find name

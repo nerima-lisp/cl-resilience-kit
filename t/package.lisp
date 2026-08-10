@@ -101,12 +101,6 @@
                 #:with-resilience-event-handler
                 #:with-retry
                 #:with-rate-limiter)
-  (:import-from #:cl-resilience-kit/observability
-                #:make-resilience-observability
-                #:record-resilience-event
-                #:resilience-observability-handler
-                #:resilience-observability-registry
-                #:with-resilience-observability)
   (:export #:run-tests))
 
 (in-package #:cl-resilience-kit/test)

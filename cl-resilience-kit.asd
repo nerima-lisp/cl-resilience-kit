@@ -74,7 +74,7 @@
   :homepage "https://github.com/nerima-lisp/cl-resilience-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-resilience-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-resilience-kit.git")
-  :depends-on ("cl-resilience-kit/observability" "cl-weave")
+  :depends-on ("cl-resilience-kit" "cl-weave")
   :pathname "t"
   :serial t
   :components ((:file "package")
@@ -92,7 +92,20 @@
                (:file "distributed-contract-test")
                (:file "distributed-execution-contract-test")
                (:file "condition-contract-test")
-               (:file "cps-test")
+               (:file "cps-test"))
+  :perform (asdf:test-op (operation component)
+             (declare (ignore operation component))
+             (uiop:symbol-call :cl-resilience-kit/test :run-tests)))
+
+(asdf:defsystem "cl-resilience-kit/observability-test"
+  :description "Optional cl-observability-kit integration tests."
+  :version "2.0.0"
+  :depends-on ("cl-resilience-kit/test"
+               "cl-resilience-kit/observability"
+               "cl-weave")
+  :pathname "t"
+  :serial t
+  :components ((:file "observability-package")
                (:file "observability-test"))
   :perform (asdf:test-op (operation component)
              (declare (ignore operation component))
