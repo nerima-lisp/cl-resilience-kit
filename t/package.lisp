@@ -37,6 +37,7 @@
                 #:call-with-deadline
                 #:call-with-request-coalescing
                 #:call-with-resilience
+                #:call-with-resilience/k
                 #:call-with-retry
                 #:cancel-cancellation-token
                 #:cancellation-token-cancelled-p

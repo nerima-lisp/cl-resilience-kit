@@ -79,7 +79,3 @@ retry-after hint."
                              :event-handler event-handler
                              :timeout bulkhead-timeout)))
           (run-chain)))))
-
-(defmacro with-resilience ((&rest options) &body body)
-  "Evaluate BODY using CALL-WITH-RESILIENCE's keyword options."
-  `(call-with-resilience (lambda () ,@body) ,@options))

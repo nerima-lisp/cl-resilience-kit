@@ -231,6 +231,8 @@
    #:request-coalescer-size
    #:call-with-request-coalescing
    #:with-request-coalescing
+   #:call-with-resilience/k
+   #:with-resilience/k
    #:call-with-resilience
    #:with-resilience
 

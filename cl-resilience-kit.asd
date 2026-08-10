@@ -38,10 +38,14 @@
                (:file "bulkhead")
                (:file "rate-limiter")
                (:file "composition-core")
+               (:file "composition-plan")
                (:file "executor")
                (:file "hedging")
                (:file "coalescing")
-               (:file "composition"))
+               (:file "composition-support")
+               (:file "composition-runtime")
+               (:file "composition")
+               (:file "composition-macros"))
   :in-order-to ((test-op (test-op "cl-resilience-kit/test"))))
 
 (asdf:defsystem "cl-resilience-kit/observability"
