@@ -74,7 +74,8 @@
   :homepage "https://github.com/nerima-lisp/cl-resilience-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-resilience-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-resilience-kit.git")
-  :depends-on ("cl-resilience-kit" "cl-weave")
+  :depends-on ("cl-resilience-kit"
+               (:version "cl-weave" "1.3.0"))
   :pathname "t"
   :serial t
   :components ((:file "package")
@@ -101,8 +102,7 @@
   :description "Optional cl-observability-kit integration tests."
   :version "2.0.0"
   :depends-on ("cl-resilience-kit/test"
-               "cl-resilience-kit/observability"
-               "cl-weave")
+               "cl-resilience-kit/observability")
   :pathname "t"
   :serial t
   :components ((:file "observability-package")
