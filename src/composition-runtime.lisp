@@ -178,3 +178,21 @@
                      (error operation-condition))))))
       (when entered-p
         (leave-resilience-lifecycle (resilience-plan-lifecycle plan))))))
+
+(defun %run-resilience-plan/k (plan on-success on-error)
+  "Execute PLAN and dispatch its terminal result to continuations.
+
+The runtime owns operation error handling.  Continuations are invoked only
+after that handler has exited, so a continuation error cannot be mistaken for
+an operation failure and routed back to ON-ERROR."
+  (let ((values nil)
+        (condition nil)
+        (failed-p nil))
+    (handler-case
+        (setf values (multiple-value-list (%run-resilience-plan plan)))
+      (error (caught-condition)
+        (setf condition caught-condition
+              failed-p t)))
+    (if failed-p
+        (funcall on-error condition)
+        (apply on-success values))))
