@@ -36,6 +36,8 @@
                (:file "distributed-circuit-breaker-transition")
                (:file "distributed-circuit-breaker-execution")
                (:file "distributed-circuit-breaker-api")
+               (:file "bulkhead-definition")
+               (:file "bulkhead-execution")
                (:file "bulkhead")
                (:file "rate-limiter")
                (:file "composition-core")
