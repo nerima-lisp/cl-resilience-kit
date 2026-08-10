@@ -113,7 +113,7 @@ data.
  thunk
  &key retry-policy circuit-breaker distributed-circuit-breaker
       bulkhead bulkhead-timeout rate-limiter rate-limit-tokens
-      rate-limit-wait-p rate-limit-max-wait
+      rate-limit-wait-p rate-limit-max-wait rate-limit-signal-on-reject-p
       overall-timeout overall-deadline per-attempt-timeout
       clock monotonic-units-per-second sleeper operation retry-budget
       cancellation-token event-handler fallback context metrics observer
