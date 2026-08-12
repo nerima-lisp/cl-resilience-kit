@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 ;;; Lifecycle and health boundaries
 
@@ -19,20 +19,20 @@
 (defun make-resilience-lifecycle (&key name)
   (make-instance
    'resilience-lifecycle
-   :lock (cl-concurrent-kit:make-lock
+   :lock (make-lock
           :name (or name "cl-resilience-kit.lifecycle"))
    :condition-variable
-   (cl-concurrent-kit:make-condition-variable
+   (make-condition-variable
     :name (or name "cl-resilience-kit.lifecycle.condition"))))
 
 (defun resilience-lifecycle-state (lifecycle)
   (check-type lifecycle resilience-lifecycle)
-  (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+  (with-lock-held ((%resilience-lifecycle-lock lifecycle))
     (%resilience-lifecycle-state lifecycle)))
 
 (defun resilience-lifecycle-active (lifecycle)
   (check-type lifecycle resilience-lifecycle)
-  (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+  (with-lock-held ((%resilience-lifecycle-lock lifecycle))
     (%resilience-lifecycle-active lifecycle)))
 
 (defun resilience-lifecycle-accepting-p (lifecycle)
@@ -40,16 +40,16 @@
 
 (defun begin-resilience-drain (lifecycle)
   (check-type lifecycle resilience-lifecycle)
-  (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+  (with-lock-held ((%resilience-lifecycle-lock lifecycle))
     (when (eq (%resilience-lifecycle-state lifecycle) :running)
       (setf (%resilience-lifecycle-state lifecycle) :draining)
-      (cl-concurrent-kit:condition-broadcast
+      (condition-broadcast
        (%resilience-lifecycle-condition-variable lifecycle)))
     (%resilience-lifecycle-state lifecycle)))
 
 (defun enter-resilience-lifecycle (lifecycle &key operation)
   (check-type lifecycle resilience-lifecycle)
-  (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+  (with-lock-held ((%resilience-lifecycle-lock lifecycle))
     (unless (eq (%resilience-lifecycle-state lifecycle) :running)
       (error 'resilience-draining
              :operation operation
@@ -60,11 +60,11 @@
 
 (defun leave-resilience-lifecycle (lifecycle)
   (check-type lifecycle resilience-lifecycle)
-  (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+  (with-lock-held ((%resilience-lifecycle-lock lifecycle))
     (when (plusp (%resilience-lifecycle-active lifecycle))
       (decf (%resilience-lifecycle-active lifecycle)))
     (when (zerop (%resilience-lifecycle-active lifecycle))
-      (cl-concurrent-kit:condition-broadcast
+      (condition-broadcast
        (%resilience-lifecycle-condition-variable lifecycle)))
     (%resilience-lifecycle-active lifecycle)))
 
@@ -74,12 +74,12 @@
   (when timeout
     (%ensure-non-negative-real timeout "TIMEOUT"))
   (let ((deadline (and timeout (+ (%now) (float timeout 1d0)))))
-    (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+    (with-lock-held ((%resilience-lifecycle-lock lifecycle))
       (loop while (plusp (%resilience-lifecycle-active lifecycle)) do
         (let ((remaining (and deadline (max 0d0 (- deadline (%now))))))
           (when (and deadline (zerop remaining))
             (return-from await-resilience-drained nil))
-          (unless (cl-concurrent-kit:condition-wait
+          (unless (condition-wait
                    (%resilience-lifecycle-condition-variable lifecycle)
                    (%resilience-lifecycle-lock lifecycle)
                    :timeout remaining)
@@ -92,9 +92,9 @@
   (check-type lifecycle resilience-lifecycle)
   (begin-resilience-drain lifecycle)
   (when (await-resilience-drained lifecycle :timeout timeout)
-    (cl-concurrent-kit:with-lock-held ((%resilience-lifecycle-lock lifecycle))
+    (with-lock-held ((%resilience-lifecycle-lock lifecycle))
       (setf (%resilience-lifecycle-state lifecycle) :stopped)
-      (cl-concurrent-kit:condition-broadcast
+      (condition-broadcast
        (%resilience-lifecycle-condition-variable lifecycle)))
     t))
 
@@ -116,26 +116,26 @@
 (defun make-health-registry (&key name)
   (make-instance
    'health-registry
-   :lock (cl-concurrent-kit:make-lock
+   :lock (make-lock
           :name (or name "cl-resilience-kit.health"))))
 
 (defun register-health-check (registry name checker)
   (check-type registry health-registry)
   (check-type checker function)
-  (cl-concurrent-kit:with-lock-held ((%health-registry-lock registry))
+  (with-lock-held ((%health-registry-lock registry))
     (setf (gethash name (%health-registry-checks registry)) checker))
   name)
 
 (defun unregister-health-check (registry name)
   (check-type registry health-registry)
-  (cl-concurrent-kit:with-lock-held ((%health-registry-lock registry))
+  (with-lock-held ((%health-registry-lock registry))
     (remhash name (%health-registry-checks registry)))
   registry)
 
 (defun health-report (registry)
   (check-type registry health-registry)
   (let ((checks
-          (cl-concurrent-kit:with-lock-held ((%health-registry-lock registry))
+          (with-lock-held ((%health-registry-lock registry))
             (loop for name being the hash-keys of (%health-registry-checks registry)
                   using (hash-value checker)
                   collect (cons name checker)))))

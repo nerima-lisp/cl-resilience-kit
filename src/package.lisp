@@ -1,5 +1,42 @@
-(defpackage #:cl-resilience-kit
+(defpackage #:resilience-kit
+  (:nicknames #:cl-resilience-kit)
   (:use #:cl)
+  (:import-from #:cl-boundary-kit
+                #:clock-monotonic
+                #:make-clock
+                #:make-random-source
+                #:make-sleeper
+                #:random-source-random
+                #:sleeper-sleep)
+  (:import-from #:cl-date-kit
+                #:duration-of-seconds)
+  (:import-from #:cl-concurrent-kit
+                #:condition-broadcast
+                #:condition-notify
+                #:condition-wait
+                #:deliver
+                #:deliver-error
+                #:executor-high-water-mark
+                #:executor-queue-capacity
+                #:executor-queue-depth
+                #:executor-shutdown-p
+                #:executor-terminated-p
+                #:future
+                #:await
+                #:make-condition-variable
+                #:make-executor
+                #:make-lock
+                #:make-promise
+                #:operation-timed-out
+                #:operation-timed-out-operation
+                #:promise-all-failed
+                #:promise-all-failed-causes
+                #:promise-any
+                #:promise-already-fulfilled
+                #:shutdown-executor
+                #:try-submit
+                #:with-timeout
+                #:with-lock-held)
   (:export
    ;; Cooperative cancellation.
    #:cancellation-token

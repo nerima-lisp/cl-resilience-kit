@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 ;;; Distributed circuit breaker public API
 
@@ -51,7 +51,9 @@
        (%distributed-circuit-breaker-store-error
         breaker "Could not reset the distributed circuit-breaker state.")))))
 
-(defmacro with-distributed-circuit-breaker ((breaker &rest options) &body body)
+(defmacro with-distributed-circuit-breaker
+    ((breaker &rest options) &body body)
   "Evaluate BODY through DISTRIBUTED-CIRCUIT-BREAKER-CALL."
-  `(distributed-circuit-breaker-call
-    ,breaker (lambda () ,@body) ,@options))
+  `(distributed-circuit-breaker-call ,breaker
+                                     (lambda () ,@body)
+                                     ,@options))

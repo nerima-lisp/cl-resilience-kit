@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defclass bulkhead ()
   ((limit
@@ -21,12 +21,12 @@ queue."
     (error "LIMIT must be a positive integer, got ~S." limit))
   (make-instance 'bulkhead
                  :limit limit
-                 :lock (cl-concurrent-kit:make-lock
+                 :lock (make-lock
                         :name "cl-resilience-kit.bulkhead")))
 
 (defun bulkhead-in-flight (bulkhead)
   (check-type bulkhead bulkhead)
-  (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
+  (with-lock-held ((%bulkhead-lock bulkhead))
     (%bulkhead-in-flight bulkhead)))
 
 ;;; A bounded waiting bulkhead.
@@ -58,16 +58,16 @@ zero preserves immediate rejection when all slots are occupied."
    'queued-bulkhead
    :limit limit
    :max-queue max-queue
-   :lock (cl-concurrent-kit:make-lock
+   :lock (make-lock
           :name "cl-resilience-kit.queued-bulkhead")
    :condition-variable
-   (cl-concurrent-kit:make-condition-variable
+   (make-condition-variable
     :name "cl-resilience-kit.queued-bulkhead")))
 
 (defun queued-bulkhead-queue-size (bulkhead)
   "Return the number of callers currently waiting for admission."
   (check-type bulkhead queued-bulkhead)
-  (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
+  (with-lock-held ((%bulkhead-lock bulkhead))
     (%queued-bulkhead-waiting bulkhead)))
 
 (defun %queued-bulkhead-rejection

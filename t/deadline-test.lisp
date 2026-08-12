@@ -1,19 +1,20 @@
-(in-package #:cl-resilience-kit/test)
+(in-package #:resilience-kit/test)
 
 (describe "deadlines and attempt timeouts"
   (it "uses monotonic fake time for a cooperative deadline"
     (let* ((fixture (make-test-fixture))
-           (caught nil))
-      (handler-case
-          (call-with-deadline
-           (lambda ()
-             (advance-fixture fixture 2)
-             :finished)
-           :timeout 1
-           :clock (test-fixture-clock fixture)
-           :monotonic-units-per-second +test-monotonic-units-per-second+)
-        (deadline-exceeded (condition)
-          (setf caught condition)))
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-deadline
+                 (lambda ()
+                   (advance-fixture fixture 2)
+                   :finished)
+                 :timeout 1
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+))
+              'deadline-exceeded)))
       (expect (typep caught 'deadline-exceeded) :to-be-truthy)
       (expect (deadline-exceeded-stage caught) :to-be :operation)
       (expect (deadline-exceeded-attempt caught) :to-be nil)))
@@ -84,26 +85,26 @@
 
   (it "distinguishes overall deadline from per-attempt timeout"
     (let* ((fixture (make-test-fixture))
-           (caught nil)
-           (policy (make-retry-policy :max-attempts 1 :retry-safe-p t)))
-      (handler-case
-          (call-with-retry
-           policy
-           (lambda ()
-             (advance-fixture fixture 1)
-             :finished)
-           :per-attempt-timeout 1
-           :clock (test-fixture-clock fixture)
-           :monotonic-units-per-second +test-monotonic-units-per-second+
-           :sleeper (test-fixture-sleeper fixture))
-        (attempt-timeout (condition)
-          (setf caught condition)))
+           (policy (make-retry-policy :max-attempts 1 :retry-safe-p t))
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-retry
+                 policy
+                 (lambda ()
+                   (advance-fixture fixture 1)
+                   :finished)
+                 :per-attempt-timeout 1
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+
+                 :sleeper (test-fixture-sleeper fixture)))
+              'attempt-timeout)))
       (expect (typep caught 'attempt-timeout) :to-be-truthy)
       (expect (attempt-timeout-timeout caught) :to-be 1.0d0)))
 
   (it "does not sleep a backoff that would cross the overall deadline"
     (let* ((fixture (make-test-fixture))
-           (caught nil)
            (attempts 0)
            (policy (make-retry-policy
                     :max-attempts 2
@@ -112,19 +113,21 @@
                     :condition-classifier
                     (lambda (condition attempt)
                       (declare (ignore condition attempt))
-                      t))))
-      (handler-case
-          (call-with-retry
-           policy
-           (lambda ()
-             (incf attempts)
-             (error "transient"))
-           :overall-timeout 1
-           :clock (test-fixture-clock fixture)
-           :monotonic-units-per-second +test-monotonic-units-per-second+
-           :sleeper (test-fixture-sleeper fixture))
-        (deadline-exceeded (condition)
-          (setf caught condition)))
+                      t)))
+           (caught
+             (expect-condition
+              (lambda ()
+                (call-with-retry
+                 policy
+                 (lambda ()
+                   (incf attempts)
+                   (error "transient"))
+                 :overall-timeout 1
+                 :clock (test-fixture-clock fixture)
+                 :monotonic-units-per-second
+                 +test-monotonic-units-per-second+
+                 :sleeper (test-fixture-sleeper fixture)))
+              'deadline-exceeded)))
       (expect attempts :to-be 1)
       (expect (deadline-exceeded-stage caught) :to-be :backoff)
       (expect (fixture-sleeps fixture) :to-equal nil)))
@@ -197,7 +200,7 @@
             (error "original"))
           :timeout 10
           :cancellation-token token))
-       'simple-error))
+         'simple-error)))
 
   (it "does not extend a parent deadline in nested scopes"
     (let ((fixture (make-test-fixture)))
@@ -224,4 +227,4 @@
         (lambda () :never)
         :timeout 1
         :monotonic-units-per-second 0))
-     'error)))
+       'error))

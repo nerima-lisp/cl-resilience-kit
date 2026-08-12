@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun call-with-retry
     (policy thunk &key overall-timeout overall-deadline per-attempt-timeout
@@ -52,107 +52,21 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
           (*resilience-deadline* effective-deadline)
           (*resilience-cancellation-token* active-token)
           (*resilience-event-handler* active-handler))
-      (labels ((handle-condition (attempt previous-delay condition)
-                 (%emit-resilience-event
-                  active-handler :attempt-failure
-                  :operation operation :attempt attempt
-                  :condition condition :clock active-clock
-                  :monotonic-units-per-second units)
-                 (let ((decision
-                         (%retry-decision-for
-                          policy attempt :condition condition)))
-                   (if (retry-decision-retry-p decision)
-                       (if (>= attempt (retry-policy-max-attempts policy))
-                           (let ((exhausted
-                                   (%make-retry-exhausted
-                                    policy attempt condition nil
-                                    (retry-decision-reason decision)
-                                    operation)))
-                             (%emit-resilience-event
-                              active-handler :retry-exhausted
-                              :operation operation :attempt attempt
-                              :condition condition :reason
-                              (retry-decision-reason decision)
-                              :clock active-clock
-                              :monotonic-units-per-second units)
-                             (error exhausted))
-                           (let ((delay
-                                   (%retry-delay-or-deadline
-                                    policy attempt previous-delay decision
-                                    active-clock units effective-deadline
-                                    active-sleeper operation condition nil
-                                    retry-budget active-handler)))
-                             (run-loop (1+ attempt) delay)))
-                       (%invoke-retry-fallback
-                        fallback condition active-handler operation attempt
-                        active-clock units))))
-               (run-loop (attempt previous-delay)
+      (labels ((run-loop (attempt previous-delay)
                  (handler-case
-                     (progn
-                       (%check-active-cancellation-token)
-                       (%emit-resilience-event
-                        active-handler :attempt-start
-                        :operation operation :attempt attempt
-                        :clock active-clock
-                        :monotonic-units-per-second units)
-                       (if (and (null active-handler)
-                                (or (not (retry-policy-retry-safe-p policy))
-                                    (null (retry-policy-result-classifier
-                                           policy))))
-                           (%execute-attempt
-                            thunk active-clock units effective-deadline
-                            per-attempt-timeout operation attempt)
-                           (let* ((returned
-                                    (multiple-value-list
-                                     (%execute-attempt
-                                      thunk active-clock units effective-deadline
-                                      per-attempt-timeout operation attempt)))
-                                  (result (first returned))
-                                  (decision
-                                    (%retry-decision-for
-                                     policy attempt :result result)))
-                             (if (retry-decision-retry-p decision)
-                                 (progn
-                                   (%emit-resilience-event
-                                    active-handler :attempt-failure
-                                    :operation operation :attempt attempt
-                                    :result result :reason
-                                    (retry-decision-reason decision)
-                                    :clock active-clock
-                                    :monotonic-units-per-second units)
-                                   (if (>= attempt
-                                           (retry-policy-max-attempts policy))
-                                       (let ((exhausted
-                                               (%make-retry-exhausted
-                                                policy attempt nil result
-                                                (retry-decision-reason decision)
-                                                operation)))
-                                         (%emit-resilience-event
-                                          active-handler :retry-exhausted
-                                          :operation operation :attempt attempt
-                                          :result result :reason
-                                          (retry-decision-reason decision)
-                                          :clock active-clock
-                                          :monotonic-units-per-second units)
-                                         (error exhausted))
-                                       (let ((delay
-                                               (%retry-delay-or-deadline
-                                                policy attempt previous-delay decision
-                                                active-clock units effective-deadline
-                                                active-sleeper operation nil result
-                                                retry-budget active-handler)))
-                                         (run-loop (1+ attempt) delay))))
-                                 (progn
-                                   (%emit-resilience-event
-                                    active-handler :attempt-success
-                                    :operation operation :attempt attempt
-                                    :result result :clock active-clock
-                                    :monotonic-units-per-second units)
-                                   (apply #'values returned))))))
+                     (%run-retry-attempt
+                     #'run-loop policy thunk attempt previous-delay
+                      active-clock units effective-deadline
+                      per-attempt-timeout active-sleeper operation
+                      retry-budget active-handler)
                    ;; ATTEMPT-TIMEOUT is retryable only when the caller's
                    ;; classifier explicitly opts into retrying it.
                    (attempt-timeout (condition)
-                     (handle-condition attempt previous-delay condition))
+                     (%handle-retry-condition
+                      #'run-loop policy attempt previous-delay condition
+                      active-clock units effective-deadline
+                      active-sleeper operation retry-budget
+                      active-handler fallback))
                    ;; The overall deadline is terminal for the complete
                    ;; operation; it is never converted into another attempt.
                    (deadline-exceeded (condition)
@@ -162,7 +76,11 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
                    (retry-classifier-error (condition)
                      (error condition))
                    (error (condition)
-                     (handle-condition attempt previous-delay condition)))))
+                     (%handle-retry-condition
+                      #'run-loop policy attempt previous-delay condition
+                      active-clock units effective-deadline
+                      active-sleeper operation retry-budget
+                      active-handler fallback)))))
         (handler-case
             (progn
               (%check-active-cancellation-token)
@@ -200,12 +118,3 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
              active-clock units))
           (retry-classifier-error (condition)
             (error condition)))))))
-
-(defmacro with-retry
-    ((policy &rest options) &body body)
-  "Evaluate BODY through CALL-WITH-RETRY.
-
-POLICY and OPTIONS are evaluated by CALL-WITH-RETRY in the surrounding
-lexical environment.  The macro is the block-oriented counterpart of the
-first-class CALL-WITH-RETRY function."
-  `(call-with-retry ,policy (lambda () ,@body) ,@options))

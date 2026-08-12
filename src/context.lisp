@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defparameter +default-monotonic-units-per-second+
   (coerce internal-time-units-per-second 'double-float))
@@ -11,16 +11,6 @@
 (defvar *resilience-context* nil)
 
 
-(defun %finite-real-p (value)
-  "Return true when VALUE is a finite real representable as a double float."
-  (and (realp value)
-       (= value value)
-       (handler-case
-           (let ((double (float value 1d0)))
-             (and (= double double)
-                  (<= (abs double) most-positive-double-float)))
-         (error () nil))))
-
 (defun %ensure-non-negative-real (value name)
   (unless (and (%finite-real-p value) (not (minusp value)))
     (error "~A must be a non-negative real, got ~S." name value))
@@ -32,7 +22,7 @@
   (float value 1d0))
 
 (defun %active-clock (clock)
-  (or clock *resilience-clock* (cl-boundary-kit:make-clock)))
+  (or clock *resilience-clock* (make-clock)))
 
 (defun %active-monotonic-units-per-second (units)
   (%ensure-positive-real
@@ -42,7 +32,7 @@
    "MONOTONIC-UNITS-PER-SECOND"))
 
 (defun %monotonic-seconds (clock monotonic-units-per-second)
-  (/ (float (cl-boundary-kit:clock-monotonic clock) 1d0)
+  (/ (float (clock-monotonic clock) 1d0)
      (float monotonic-units-per-second 1d0)))
 
 (defun %now (&key clock monotonic-units-per-second)
@@ -52,17 +42,16 @@
     (%monotonic-seconds active-clock units)))
 
 (defun %active-sleeper (sleeper)
-  (or sleeper (cl-boundary-kit:make-sleeper)))
+  (or sleeper (make-sleeper)))
 
 (defun %sleep (sleeper seconds)
-  (cl-boundary-kit:sleeper-sleep sleeper seconds))
+  (sleeper-sleep sleeper seconds))
 
 (defun %active-random-source (random-source)
-  (or random-source (cl-boundary-kit:make-random-source)))
+  (or random-source (make-random-source)))
 
 (defun %random-unit (random-source)
-  (/ (float (cl-boundary-kit:random-source-random random-source 1000000)
-            1d0)
+  (/ (float (random-source-random random-source 1000000) 1d0)
      1000000d0))
 
 (defun %effective-deadline (requested-deadline)
@@ -134,7 +123,7 @@ tracing SDK without making the core depend on that transport."
          :parent-span-id (or (resilience-context-parent-span-id overlay)
                              (resilience-context-parent-span-id base))
          :idempotency-key (or (resilience-context-idempotency-key overlay)
-                             (resilience-context-idempotency-key base))
+                              (resilience-context-idempotency-key base))
          :tags (append (copy-tree (resilience-context-tags overlay))
                        (copy-tree (resilience-context-tags base)))
          :baggage (append (copy-tree (resilience-context-baggage overlay))
@@ -142,19 +131,24 @@ tracing SDK without making the core depend on that transport."
 
 (defmacro with-resilience-context ((&rest initargs) &body body)
   "Bind a merged RESILIENCE-CONTEXT for BODY."
-  `(let ((*resilience-context*
-           (merge-resilience-context
-            *resilience-context*
-            (make-resilience-context ,@initargs))))
-     ,@body))
+  (let ((current-context-name (gensym "CURRENT-RESILIENCE-CONTEXT-"))
+        (overlay-context-name (gensym "OVERLAY-RESILIENCE-CONTEXT-")))
+    `(let* ((,current-context-name *resilience-context*)
+            (,overlay-context-name (make-resilience-context ,@initargs))
+            (*resilience-context*
+              (merge-resilience-context
+               ,current-context-name
+               ,overlay-context-name)))
+       ,@body)))
 
 (defmacro with-resilience-event-handler ((handler) &body body)
   "Bind HANDLER as the inherited event sink for BODY.
 
 HANDLER is evaluated once and may be NIL to explicitly disable inherited
 events for the dynamic extent of BODY."
-  `(let ((active-handler ,handler))
-     (when active-handler
-       (check-type active-handler function))
-     (let ((*resilience-event-handler* active-handler))
-       ,@body)))
+  (let ((active-handler-name (gensym "ACTIVE-RESILIENCE-EVENT-HANDLER-")))
+    `(let ((,active-handler-name ,handler))
+       (when ,active-handler-name
+         (check-type ,active-handler-name function))
+       (let ((*resilience-event-handler* ,active-handler-name))
+         ,@body))))

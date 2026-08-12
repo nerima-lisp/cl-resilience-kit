@@ -1,5 +1,5 @@
 {
-  description = "Composable, dependency-neutral resilience primitives for Common Lisp";
+  description = "Composable resilience primitives for Common Lisp on top of Nerima Lisp packages";
 
   inputs = {
     # Use the tested NixOS channel rather than an independently moving
@@ -20,6 +20,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.cl-nix-forge.follows = "cl-nix-forge";
       inputs.treefmt-nix.follows = "treefmt-nix";
+    };
+
+    # Keep the structural editing/lint tool pinned to a release tag so
+    # `nix develop` and `nix flake check` do not silently drift on update.
+    paredit-cli = {
+      url = "github:nerima-lisp/paredit-cli/v1.6.0";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Main-system dependencies. This project uses the boundary package for
@@ -55,8 +62,16 @@
       inputs.treefmt-nix.follows = "treefmt-nix";
     };
 
+    # cl-dataflow's runtime depends on cl-prolog. Both can be consumed as
+    # source trees here, which avoids requiring an upstream per-system package
+    # output on aarch64-darwin.
+    cl-prolog = {
+      url = "github:nerima-lisp/cl-prolog/v1.4.3";
+      flake = false;
+    };
+
     cl-observability-kit = {
-      url = "github:nerima-lisp/cl-observability-kit/c347c51dc2c79f7c79010330249492ececd7d9e6";
+      url = "github:nerima-lisp/cl-observability-kit/v0.1.0";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.cl-nix-forge.follows = "cl-nix-forge";
       inputs.cl-concurrent-kit.follows = "cl-concurrent-kit";
@@ -64,6 +79,11 @@
       inputs.cl-boundary-kit.follows = "cl-boundary-kit";
       inputs.cl-weave.follows = "cl-weave";
       inputs.treefmt-nix.follows = "treefmt-nix";
+    };
+
+    cl-dataflow = {
+      url = "github:nerima-lisp/cl-dataflow/v1.1.1";
+      flake = false;
     };
   };
 
@@ -76,7 +96,10 @@
       cl-boundary-kit,
       cl-concurrent-kit,
       cl-date-kit,
+      cl-prolog,
+      cl-dataflow,
       cl-observability-kit,
+      paredit-cli,
       treefmt-nix,
       ...
     }:
@@ -100,7 +123,7 @@
              (let ((source (pathname file)))
                (unless (and (uiop:subpathp source source-root)
                             (not (member (file-namestring source)
-                                         '("conditions.lisp" "package.lisp")
+                                         '("package.lisp")
                                          :test #'string-equal)))
                  (push file discarded-files))))
            table)
@@ -109,7 +132,7 @@
       '';
       cl = cl-nix-forge.lib.${nixpkgs.lib.head systems};
       meta = {
-        description = "Composable, dependency-neutral resilience primitives for Common Lisp";
+        description = "Composable resilience primitives for Common Lisp on top of Nerima Lisp packages";
         homepage = "https://github.com/nerima-lisp/cl-resilience-kit";
         license = nixpkgs.lib.licenses.mit;
       };
@@ -134,10 +157,29 @@
         cl-date-kit.packages.${ctx.system}.cl-date-kit
       ];
 
-      lispCheckDependencies = ctx: [
-        cl-observability-kit.packages.${ctx.system}.cl-observability-kit
-        cl-weave.packages.${ctx.system}.cl-weave
-      ];
+      lispCheckDependencies =
+        ctx:
+        let
+          prolog = ctx.cl.lispDerivation {
+            lispSystem = "cl-prolog";
+            version = ctx.cl.fromAsdSystem "${cl-prolog}/cl-prolog.asd";
+            src = cl-prolog;
+          };
+          dataflow = ctx.cl.lispDerivation {
+            lispSystem = "cl-dataflow";
+            version = ctx.cl.fromAsdSystem "${cl-dataflow}/cl-dataflow.asd";
+            src = cl-dataflow;
+            lispDependencies = [
+              prolog
+              cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit
+            ];
+          };
+        in
+        [
+          dataflow
+          cl-observability-kit.packages.${ctx.system}.cl-observability-kit
+          cl-weave.packages.${ctx.system}.cl-weave
+        ];
 
       # SBCL records the absolute source pathname in every FASL. Nix gives
       # each derivation a different temporary build directory. Compile from a
@@ -145,7 +187,7 @@
       # delete or chmod each other's source while retaining the dependency
       # registry assembled by cl-nix-forge. The package output still contains
       # source plus FASLs.
-      packageArgs = _: {
+      packageArgs = ctx: {
         preBuild = ''
           sourceRoot="$PWD"
           buildRoot="$TMPDIR/cl-resilience-kit-source-$name"
@@ -163,9 +205,70 @@
             export CL_SOURCE_REGISTRY="$PWD$registrySuffix"
           fi
         '';
+        # sb-cover derives source-page names from absolute pathnames.  The
+        # private build root above is intentionally unique, so normalize the
+        # generated report only after sb-cover has finished writing it.
+        postCheck = ''
+                    if [ -d cl-nix-forge-coverage-report ]; then
+                      ${
+                        nixpkgs.legacyPackages.${ctx.system}.perl
+                      }/bin/perl - cl-nix-forge-coverage-report <<'PERL'
+          use strict;
+          use warnings;
+
+          my ($report_directory) = @ARGV;
+          my @pages = glob "$report_directory/*.html";
+          die "sb-cover report contains no HTML pages\n" unless @pages;
+
+          my (%renames, %source_roots, %contents);
+          for my $page (@pages) {
+              open my $input, '<', $page or die "cannot read $page: $!\n";
+              local $/;
+              my $content = <$input>;
+              close $input or die "cannot close $page: $!\n";
+              $contents{$page} = $content;
+
+              next unless $content =~ m{Coverage report:\s+(.*/src/)([^ <]+)\s+<br}s;
+              my ($source_root, $relative_source) = ($1, $2);
+              $source_roots{$source_root} = 1;
+              (my $stable_name = "source-$relative_source.html") =~ s{/}{--}g;
+              $renames{(split m{/}, $page)[-1]} = $stable_name;
+          }
+
+          die "sb-cover report contains no source pages\n" unless %renames;
+          die "sb-cover report contains multiple source roots\n" unless keys(%source_roots) == 1;
+          my ($source_root) = keys %source_roots;
+
+          for my $page (@pages) {
+              my $content = $contents{$page};
+              $content =~ s/\Q$source_root\E/src\//g;
+              for my $old_name (keys %renames) {
+                  $content =~ s/\Q$old_name\E/$renames{$old_name}/g;
+              }
+              open my $output, '>', $page or die "cannot write $page: $!\n";
+              print {$output} $content or die "cannot write $page: $!\n";
+              close $output or die "cannot close $page: $!\n";
+          }
+
+          for my $old_name (keys %renames) {
+              my $old_path = "$report_directory/$old_name";
+              my $new_path = "$report_directory/$renames{$old_name}";
+              die "stable coverage page already exists: $new_path\n" if -e $new_path;
+              rename $old_path, $new_path or die "cannot rename $old_path: $!\n";
+          }
+          PERL
+                    fi
+        '';
       };
 
       treefmt.evalModule = treefmt-nix.lib.evalModule;
+
+      # Match the validator set used by sibling nerima-lisp repositories so
+      # structural errors can be reproduced locally from the dev shell.
+      devShellPackages = ctx: [
+        ctx.pkgs.perl
+        paredit-cli.packages.${ctx.system}.default
+      ];
 
       # Keep the generic report available to CI and to developers. The report
       # uses this system's own test operation and never treats an empty test
@@ -182,6 +285,10 @@
           entryPointText = coverageEntryPointText;
           timeoutSeconds = coverageTimeoutSeconds;
           killAfterSeconds = terminationGraceSeconds;
+        };
+        checks.paredit-lint = paredit-cli.lib.${ctx.system}.mkLintCheck {
+          inherit (ctx) src;
+          name = "cl-resilience-kit-paredit-lint";
         };
       };
     };

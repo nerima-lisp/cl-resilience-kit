@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 ;;; Portable state store and fencing lease contracts
 
@@ -50,11 +50,11 @@
 (defun make-memory-state-store (&key name)
   (make-instance
    'memory-state-store
-   :lock (cl-concurrent-kit:make-lock
+   :lock (make-lock
           :name (or name "cl-resilience-kit.memory-state-store"))))
 
 (defmethod state-store-get ((store memory-state-store) key)
-  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
+  (with-lock-held ((%memory-state-store-lock store))
     (let ((record (gethash key (%memory-state-store-records store))))
       (if record
           (values (copy-tree (%state-record-value record))
@@ -63,7 +63,7 @@
 
 (defmethod state-store-put-if-version
     ((store memory-state-store) key value expected-version)
-  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
+  (with-lock-held ((%memory-state-store-lock store))
     (let* ((records (%memory-state-store-records store))
            (record (gethash key records))
            (actual-version (and record (%state-record-version record))))
@@ -80,7 +80,7 @@
 
 (defmethod state-store-delete-if-version
     ((store memory-state-store) key expected-version)
-  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
+  (with-lock-held ((%memory-state-store-lock store))
     (let* ((records (%memory-state-store-records store))
            (record (gethash key records))
            (actual-version (and record (%state-record-version record))))
@@ -95,7 +95,7 @@
 
 (defmethod state-store-scan-prefix ((store memory-state-store) prefix)
   (check-type prefix string)
-  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
+  (with-lock-held ((%memory-state-store-lock store))
     (loop for key being the hash-keys of (%memory-state-store-records store)
           for record = (gethash key (%memory-state-store-records store))
           when (and (stringp key)

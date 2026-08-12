@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defclass cancellation-token ()
   ((parent
@@ -25,10 +25,10 @@ parent token's cancellation is visible to every descendant token."
   (make-instance
    'cancellation-token
    :parent parent
-   :lock (cl-concurrent-kit:make-lock :name "cl-resilience-kit.cancellation-token")))
+   :lock (make-lock :name "cl-resilience-kit.cancellation-token")))
 
 (defun %cancellation-token-local-state (token)
-  (cl-concurrent-kit:with-lock-held ((%cancellation-token-lock token))
+  (with-lock-held ((%cancellation-token-lock token))
     (values (%cancellation-token-cancelled-p token)
             (%cancellation-token-reason token))))
 
@@ -67,7 +67,7 @@ stable for observers."
                  (second arguments))
                 (t
                  (error "CANCEL-CANCELLATION-TOKEN accepts an optional reason.")))))
-    (cl-concurrent-kit:with-lock-held ((%cancellation-token-lock token))
+    (with-lock-held ((%cancellation-token-lock token))
       (unless (%cancellation-token-cancelled-p token)
         (setf (%cancellation-token-cancelled-p token) t
               (%cancellation-token-reason token) reason)))

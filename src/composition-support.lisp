@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun %combined-resilience-handler (event-handler metrics observer)
   "Combine optional event, metrics, and observation handlers."

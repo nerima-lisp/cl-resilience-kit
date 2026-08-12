@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun %circuit-open-condition
     (state retry-at generation operation)
@@ -13,7 +13,7 @@
    :generation generation))
 
 (defun %circuit-breaker-begin (breaker operation)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (let ((now (%circuit-breaker-now breaker)))
       (case (%circuit-breaker-state breaker)
         (:closed
@@ -69,7 +69,7 @@
 
 (defun %circuit-breaker-finish
     (breaker token-state token-generation failed-p)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     ;; A completion from an obsolete generation cannot overwrite a newer
     ;; reset, close, or reopen transition.
     (when (= token-generation (%circuit-breaker-generation breaker))

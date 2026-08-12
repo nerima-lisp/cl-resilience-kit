@@ -1,7 +1,7 @@
-(defpackage #:cl-resilience-kit/observability
-  (:nicknames #:resilience-observability)
+(defpackage #:resilience-observability
+  (:nicknames #:cl-resilience-kit/observability)
   (:use #:cl)
-  (:import-from #:cl-resilience-kit
+  (:import-from #:resilience-kit
                 #:resilience-event
                 #:resilience-event-duration
                 #:resilience-event-operation
@@ -24,7 +24,7 @@
            #:record-resilience-event
            #:with-resilience-observability))
 
-(in-package #:cl-resilience-kit/observability)
+(in-package #:resilience-observability)
 
 (defstruct (resilience-observability
             (:constructor %make-resilience-observability
@@ -62,7 +62,7 @@
 (defun %event-label (value)
   (typecase value
     (null "unknown")
-    (string (if (plusp (length value)) value "unknown"))
+    (string (if (string= value "") "unknown" value))
     (symbol (string-downcase (symbol-name value)))
     (t (princ-to-string value))))
 
@@ -71,15 +71,6 @@
               (%event-label (resilience-event-type event)))
         (cons "operation"
               (%event-label (resilience-event-operation event)))))
-
-(defun %finite-duration-seconds (duration)
-  (when (and (realp duration) (not (minusp duration)))
-    (handler-case
-        (let ((seconds (float duration 1d0)))
-          (when (and (= seconds seconds)
-                     (<= seconds most-positive-double-float))
-            seconds))
-      (error () nil))))
 
 (defun record-resilience-event (observability event)
   "Publish EVENT to OBSERVABILITY and return EVENT."
@@ -90,7 +81,7 @@
                 1
                 :labels labels)
     (let ((duration
-            (%finite-duration-seconds
+            (resilience-kit::%finite-duration-seconds
              (resilience-event-duration event))))
       (when duration
         (metric-observe (resilience-observability-durations observability)

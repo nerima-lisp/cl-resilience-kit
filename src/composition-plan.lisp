@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defstruct (resilience-plan
             (:constructor %make-resilience-plan))

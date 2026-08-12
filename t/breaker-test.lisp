@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit/test)
+(in-package #:resilience-kit/test)
 
 (describe "circuit breaker"
   (it "opens, rejects, then closes after a successful half-open probe"
@@ -20,8 +20,8 @@
       (let ((rejected (expect-condition
                        (lambda ()
                          (circuit-breaker-call breaker (lambda () :no)))
-                       'cl-resilience-kit:circuit-open)))
-        (expect (typep rejected 'cl-resilience-kit:circuit-open)
+                       'resilience-kit:circuit-open)))
+        (expect (typep rejected 'resilience-kit:circuit-open)
                 :to-be-truthy))
       (advance-fixture fixture 1)
       (expect (circuit-breaker-call breaker (lambda () :ok)) :to-be :ok)
@@ -85,32 +85,27 @@
                      :half-open-probe-limit 1
                      :clock (test-fixture-clock fixture)
                      :monotonic-units-per-second
-                     +test-monotonic-units-per-second+))
-           (entered (make-semaphore :count 0))
-           (release (make-semaphore :count 0)))
+                     +test-monotonic-units-per-second+)))
       (expect-condition
        (lambda ()
          (circuit-breaker-call breaker (lambda () (error "open me"))))
        'error)
       (advance-fixture fixture 1)
-      (let ((thread (make-thread
-                     (lambda ()
-                       (circuit-breaker-call
-                        breaker
-                        (lambda ()
-                          (signal-semaphore entered)
-                          (wait-on-semaphore release :timeout 5)
-                          :ok))))))
-        (expect (wait-on-semaphore entered :timeout 5) :to-be-truthy)
+      (with-blocking-operation-thread
+          (entered release :result :ok)
+          (circuit-breaker-call
+           breaker
+           (make-blocking-operation
+            entered
+            release
+            :result :ok))
         (expect (circuit-breaker-active-probes breaker) :to-be 1)
         (let ((rejected (expect-condition
                          (lambda ()
                            (circuit-breaker-call breaker (lambda () :no)))
-                         'cl-resilience-kit:circuit-open)))
-          (expect (typep rejected 'cl-resilience-kit:circuit-open)
-                  :to-be-truthy))
-        (signal-semaphore release)
-        (expect (join-thread thread :timeout 5) :to-be :ok))
+                         'resilience-kit:circuit-open)))
+          (expect (typep rejected 'resilience-kit:circuit-open)
+                  :to-be-truthy)))
       (expect (circuit-breaker-state breaker) :to-be :closed)
       (expect (circuit-breaker-active-probes breaker) :to-be 0)))
 
@@ -185,8 +180,8 @@
 (describe "distributed circuit breaker"
   (it "shares state through versioned storage and closes after a probe"
     (let* ((fixture (make-test-fixture))
-           (store (cl-resilience-kit:make-memory-state-store))
-           (breaker (cl-resilience-kit:make-distributed-circuit-breaker
+           (store (resilience-kit:make-memory-state-store))
+           (breaker (resilience-kit:make-distributed-circuit-breaker
                      :store store
                      :key "service-a"
                      :failure-threshold 1
@@ -196,33 +191,33 @@
                      +test-monotonic-units-per-second+)))
       (expect-condition
        (lambda ()
-         (cl-resilience-kit:distributed-circuit-breaker-call
+         (resilience-kit:distributed-circuit-breaker-call
           breaker
           (lambda () (error "distributed failure"))))
        'error)
-      (expect (cl-resilience-kit:distributed-circuit-breaker-state breaker)
+      (expect (resilience-kit:distributed-circuit-breaker-state breaker)
               :to-be :open)
       (expect-condition
        (lambda ()
-         (cl-resilience-kit:distributed-circuit-breaker-call
+         (resilience-kit:distributed-circuit-breaker-call
           breaker (lambda () :not-run)))
-       'cl-resilience-kit:circuit-open)
+       'resilience-kit:circuit-open)
       (advance-fixture fixture 1)
       (expect
-       (cl-resilience-kit:distributed-circuit-breaker-call
+       (resilience-kit:distributed-circuit-breaker-call
         breaker (lambda () :healthy))
        :to-be
        :healthy)
-      (expect (cl-resilience-kit:distributed-circuit-breaker-state breaker)
+      (expect (resilience-kit:distributed-circuit-breaker-state breaker)
               :to-be :closed)
-      (expect (cl-resilience-kit:distributed-circuit-breaker-active-probes
+      (expect (resilience-kit:distributed-circuit-breaker-active-probes
                breaker)
               :to-be 0)))
 
   (it "releases a distributed probe after a nonlocal exit"
     (let* ((fixture (make-test-fixture))
-           (store (cl-resilience-kit:make-memory-state-store))
-           (breaker (cl-resilience-kit:make-distributed-circuit-breaker
+           (store (resilience-kit:make-memory-state-store))
+           (breaker (resilience-kit:make-distributed-circuit-breaker
                      :store store
                      :key "service-b"
                      :failure-threshold 1
@@ -232,19 +227,19 @@
                      +test-monotonic-units-per-second+)))
       (expect-condition
        (lambda ()
-         (cl-resilience-kit:distributed-circuit-breaker-call
+         (resilience-kit:distributed-circuit-breaker-call
           breaker (lambda () (error "open distributed breaker"))))
        'error)
       (advance-fixture fixture 1)
       (expect
        (catch 'distributed-probe-aborted
-         (cl-resilience-kit:distributed-circuit-breaker-call
+         (resilience-kit:distributed-circuit-breaker-call
           breaker
           (lambda () (throw 'distributed-probe-aborted :aborted))))
        :to-be
        :aborted)
-      (expect (cl-resilience-kit:distributed-circuit-breaker-active-probes
+      (expect (resilience-kit:distributed-circuit-breaker-active-probes
                breaker)
               :to-be 0)
-      (expect (cl-resilience-kit:distributed-circuit-breaker-state breaker)
+      (expect (resilience-kit:distributed-circuit-breaker-state breaker)
               :to-be :open))))

@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun current-deadline ()
   "Return the innermost active monotonic deadline in seconds, or NIL."
@@ -95,4 +95,5 @@ preemptive interruption is required."
 Use keyword arguments explicitly, for example
 `(WITH-DEADLINE (:TIMEOUT 2d0 :CLOCK CLOCK) ...)` or
 `(WITH-DEADLINE (:DEADLINE ABSOLUTE-VALUE) ...)`."
-  `(call-with-deadline (lambda () ,@body) ,@options))
+  `(call-with-deadline (lambda () ,@body)
+                       ,@options))

@@ -1,14 +1,12 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
-(defun circuit-breaker-call
-    (breaker thunk &key operation cancellation-token event-handler)
-  "Call THUNK when admitted, otherwise signal CIRCUIT-OPEN.
-
-The operation's error or first result is classified after the call and the
-reservation is always released, including when a classifier itself fails or
-THUNK exits through a non-local transfer.  Cancellation is cooperative and
-does not count as a circuit failure."
-  (check-type breaker circuit-breaker)
+(defun %call-through-circuit-breaker
+    (breaker breaker-type thunk operation cancellation-token event-handler
+     begin-function finish-function finish-classified-function
+     condition-classifier result-classifier clock
+     monotonic-units-per-second)
+  (unless (typep breaker breaker-type)
+    (error 'type-error :datum breaker :expected-type breaker-type))
   (check-type thunk function)
   (when cancellation-token
     (check-type cancellation-token cancellation-token))
@@ -18,14 +16,13 @@ does not count as a circuit failure."
     (when active-token
       (check-cancellation-token active-token))
     (multiple-value-bind (admitted token-state token-generation rejection)
-        (%circuit-breaker-begin breaker operation)
+        (funcall begin-function)
       (unless admitted
         (%emit-resilience-event
          active-handler :circuit-rejected
          :operation operation :condition rejection :reason :open
-         :clock (circuit-breaker-clock breaker)
-         :monotonic-units-per-second
-         (circuit-breaker-monotonic-units-per-second breaker))
+         :clock clock
+         :monotonic-units-per-second monotonic-units-per-second)
         (error rejection))
       (unwind-protect
            (let ((*resilience-cancellation-token* active-token)
@@ -35,9 +32,6 @@ does not count as a circuit failure."
                      (progn
                        (%check-active-cancellation-token)
                        (let ((returned (multiple-value-list (funcall thunk))))
-                         ;; A cooperative operation may observe cancellation
-                         ;; while it is returning.  Treat that as cancellation,
-                         ;; not as a circuit failure.
                          (%check-active-cancellation-token)
                          (values returned nil)))
                    (error (condition)
@@ -45,68 +39,88 @@ does not count as a circuit failure."
                (if operation-condition
                    (if (typep operation-condition 'resilience-cancelled)
                        (progn
-                         ;; Caller cancellation must not poison the circuit.
-                         (%circuit-breaker-finish
-                          breaker token-state token-generation nil)
+                         (funcall finish-function
+                                  breaker token-state token-generation nil)
                          (setf finished-p t)
                          (%emit-resilience-event
                           active-handler :cancelled
-                          :operation operation :condition operation-condition
-                          :reason (resilience-cancelled-reason
-                                   operation-condition)
-                          :clock (circuit-breaker-clock breaker)
+                          :operation operation
+                          :condition operation-condition
+                          :reason
+                          (resilience-cancelled-reason operation-condition)
+                          :clock clock
                           :monotonic-units-per-second
-                          (circuit-breaker-monotonic-units-per-second breaker))
+                          monotonic-units-per-second)
                          (error operation-condition))
                        (multiple-value-bind (failed-p classifier-error)
-                           (%circuit-breaker-finish-classified
-                            breaker token-state token-generation
-                            (circuit-breaker-condition-classifier breaker)
-                            operation-condition)
+                           (funcall finish-classified-function
+                                    breaker token-state token-generation
+                                    condition-classifier operation-condition)
                          (setf finished-p t)
                          (%emit-resilience-event
                           active-handler :circuit-failure
-                          :operation operation :condition operation-condition
-                          :reason (if failed-p :classified-failure :observed-error)
-                          :clock (circuit-breaker-clock breaker)
+                          :operation operation
+                          :condition operation-condition
+                          :reason
+                          (if failed-p
+                              :classified-failure
+                              :observed-error)
+                          :clock clock
                           :monotonic-units-per-second
-                          (circuit-breaker-monotonic-units-per-second breaker))
+                          monotonic-units-per-second)
                          (when classifier-error
                            (error classifier-error))
                          (error operation-condition)))
                    (multiple-value-bind (failed-p classifier-error)
-                       (%circuit-breaker-finish-classified
-                        breaker token-state token-generation
-                        (circuit-breaker-result-classifier breaker)
-                        (first returned))
+                       (funcall finish-classified-function
+                                breaker token-state token-generation
+                                result-classifier
+                                (first returned))
                      (setf finished-p t)
                      (if failed-p
                          (%emit-resilience-event
                           active-handler :circuit-failure
                           :operation operation :result (first returned)
                           :reason :classified-failure
-                          :clock (circuit-breaker-clock breaker)
+                          :clock clock
                           :monotonic-units-per-second
-                          (circuit-breaker-monotonic-units-per-second breaker))
+                          monotonic-units-per-second)
                          (%emit-resilience-event
                           active-handler :circuit-success
                           :operation operation :result (first returned)
-                          :clock (circuit-breaker-clock breaker)
+                          :clock clock
                           :monotonic-units-per-second
-                          (circuit-breaker-monotonic-units-per-second breaker)))
+                          monotonic-units-per-second))
                      (when classifier-error
                        (error classifier-error))
                      (apply #'values returned)))))
         (unless finished-p
-          ;; This also covers THROW, RETURN-FROM, and any other non-local exit
-          ;; from THUNK or a callback after admission.
-          (%circuit-breaker-finish
-           breaker token-state token-generation t))))))
+          (funcall finish-function
+                   breaker token-state token-generation t))))))
+
+(defun circuit-breaker-call
+    (breaker thunk &key operation cancellation-token event-handler)
+  "Call THUNK when admitted, otherwise signal CIRCUIT-OPEN.
+
+The operation's error or first result is classified after the call and the
+reservation is always released, including when a classifier itself fails or
+THUNK exits through a non-local transfer.  Cancellation is cooperative and
+  does not count as a circuit failure."
+  (%call-through-circuit-breaker
+   breaker 'circuit-breaker thunk operation cancellation-token event-handler
+   (lambda ()
+     (%circuit-breaker-begin breaker operation))
+   #'%circuit-breaker-finish
+   #'%circuit-breaker-finish-classified
+   (circuit-breaker-condition-classifier breaker)
+   (circuit-breaker-result-classifier breaker)
+   (circuit-breaker-clock breaker)
+   (circuit-breaker-monotonic-units-per-second breaker)))
 
 (defun circuit-breaker-reset (breaker)
   "Force BREAKER to CLOSED and invalidate older in-flight completions."
   (check-type breaker circuit-breaker)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (setf (%circuit-breaker-state breaker) :closed
           (%circuit-breaker-failure-count breaker) 0
           (%circuit-breaker-opened-at breaker) nil
@@ -118,4 +132,6 @@ does not count as a circuit failure."
 
 (defmacro with-circuit-breaker ((breaker &rest options) &body body)
   "Evaluate BODY through CIRCUIT-BREAKER-CALL."
-  `(circuit-breaker-call ,breaker (lambda () ,@body) ,@options))
+  `(circuit-breaker-call ,breaker
+                         (lambda () ,@body)
+                         ,@options))

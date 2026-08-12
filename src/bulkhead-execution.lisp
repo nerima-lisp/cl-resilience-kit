@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun bulkhead-call
     (bulkhead thunk &key operation cancellation-token event-handler timeout)
@@ -21,7 +21,7 @@
         (observed-in-flight 0))
     (when active-token
       (check-cancellation-token active-token))
-    (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
+    (with-lock-held ((%bulkhead-lock bulkhead))
       (setf observed-in-flight (%bulkhead-in-flight bulkhead))
       (when (< observed-in-flight (bulkhead-limit bulkhead))
         (incf (%bulkhead-in-flight bulkhead))
@@ -59,7 +59,7 @@
                ;; UNWIND-PROTECT still guarantees that the slot is released.
                (when active-token
                  (check-cancellation-token active-token))))
-        (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
+        (with-lock-held ((%bulkhead-lock bulkhead))
           (decf (%bulkhead-in-flight bulkhead)))
         (%emit-resilience-event
          active-handler :bulkhead-released
@@ -93,88 +93,18 @@ worker threads and does not cancel a call that has already been admitted."
          (queued-event-p nil))
     (when active-token
       (check-cancellation-token active-token))
-    (let ((waiting-p nil))
-      (labels ((release-waiter ()
-                 ;; This function is called only while BULKHEAD's lock is
-                 ;; held.  Clearing the flag makes cleanup idempotent across
-                 ;; normal returns and non-local exits.
-                 (when waiting-p
-                   (decf (%queued-bulkhead-waiting bulkhead))
-                   (setf waiting-p nil))))
-        (unwind-protect
-             (progn
-               (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
-                 (loop
-                   (setf observed-in-flight (%bulkhead-in-flight bulkhead))
-                   (cond
-                     ((< observed-in-flight (bulkhead-limit bulkhead))
-                      (incf (%bulkhead-in-flight bulkhead))
-                      (setf admitted-p t)
-                      (return))
-                     ((not waiting-p)
-                      (if (>= (%queued-bulkhead-waiting bulkhead)
-                              (queued-bulkhead-max-queue bulkhead))
-                          (progn
-                            (setf rejection
-                                  (%queued-bulkhead-rejection
-                                   operation :queue-full
-                                   (%queued-bulkhead-waiting bulkhead)))
-                            (return))
-                          (progn
-                            (incf (%queued-bulkhead-waiting bulkhead))
-                            (setf waiting-p t
-                                  queued-event-p t))))
-                     (t
-                      (when active-token
-                        (check-cancellation-token active-token))
-                      (let* ((deadline-remaining
-                               (deadline-remaining
-                                :clock *resilience-clock*
-                                :monotonic-units-per-second
-                                *resilience-monotonic-units-per-second*))
-                             (local-remaining
-                               (and admission-deadline
-                                    (- admission-deadline
-                                       (%now :clock *resilience-clock*
-                                             :monotonic-units-per-second
-                                             *resilience-monotonic-units-per-second*))))
-                             (remaining
-                               (cond
-                                 ((and deadline-remaining local-remaining)
-                                  (min deadline-remaining local-remaining))
-                                 (deadline-remaining deadline-remaining)
-                                 (local-remaining local-remaining)
-                                 (active-token 0.05d0)
-                                 (t nil))))
-                        (when (and remaining (<= remaining 0d0))
-                          (setf rejection
-                                (%queued-bulkhead-rejection
-                                 operation :queue-timeout
-                                 (%queued-bulkhead-waiting bulkhead)))
-                          (return))
-                        (unless (cl-concurrent-kit:condition-wait
-                                 (%queued-bulkhead-condition-variable bulkhead)
-                                 (%bulkhead-lock bulkhead)
-                                 :timeout remaining)
-                          (when (and remaining (<= remaining 0d0))
-                            (setf rejection
-                                  (%queued-bulkhead-rejection
-                                   operation :queue-timeout
-                                   (%queued-bulkhead-waiting bulkhead)))
-                            (return)))))))
-                 (release-waiter))
-               ;; User callbacks must not run while the admission lock is
-               ;; held; observers commonly inspect queue-size here.
-               (when queued-event-p
-                 (%emit-resilience-event
-                  active-handler :bulkhead-queued
-                  :operation operation
-                  :clock *resilience-clock*
-                  :monotonic-units-per-second
-                  *resilience-monotonic-units-per-second*)))
-          (when waiting-p
-            (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
-              (release-waiter))))))
+    (multiple-value-setq (admitted-p observed-in-flight rejection queued-event-p)
+      (%queued-bulkhead-admit
+       bulkhead operation active-token admission-deadline))
+    ;; User callbacks must not run while the admission lock is held; observers
+    ;; commonly inspect queue-size here.
+    (when queued-event-p
+      (%emit-resilience-event
+       active-handler :bulkhead-queued
+       :operation operation
+       :clock *resilience-clock*
+       :monotonic-units-per-second
+       *resilience-monotonic-units-per-second*))
     (unless admitted-p
       (%emit-resilience-event
        active-handler :bulkhead-rejected
@@ -202,9 +132,9 @@ worker threads and does not cancel a call that has already been admitted."
                  (funcall thunk)
                (when active-token
                  (check-cancellation-token active-token))))
-        (cl-concurrent-kit:with-lock-held ((%bulkhead-lock bulkhead))
+        (with-lock-held ((%bulkhead-lock bulkhead))
           (decf (%bulkhead-in-flight bulkhead))
-          (cl-concurrent-kit:condition-notify
+          (condition-notify
            (%queued-bulkhead-condition-variable bulkhead)))
         (%emit-resilience-event
          active-handler :bulkhead-released

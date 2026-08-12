@@ -1,10 +1,13 @@
-(defpackage #:cl-resilience-kit/test
+(defpackage #:resilience-kit/test
+  (:nicknames #:cl-resilience-kit/test)
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
                 #:around-each
                 #:collect-test-plan
                 #:expect
+                #:expect-assertions
+                #:expect-poll
                 #:finishes
                 #:gen-integer
                 #:gen-list
@@ -12,21 +15,31 @@
                 #:it
                 #:it-concurrent
                 #:it-each
+                #:it-fuzz
                 #:it-property
                 #:signals
                 #:results-status
                 #:root-suite
                 #:run
                 #:with-continuation-result
-                #:with-continuation-values)
+                #:with-continuation-values
+                #:with-soft-assertions
+                #:with-mocked-functions)
   (:import-from #:cl-concurrent-kit
                 #:current-thread
                 #:join-thread
                 #:make-semaphore
                 #:make-thread
+                #:operation-timed-out
+                #:operation-timed-out-operation
                 #:signal-semaphore
                 #:wait-on-semaphore)
-  (:import-from #:cl-resilience-kit
+  (:import-from #:cl-boundary-kit
+                #:advance-fake-clock
+                #:make-fake-clock
+                #:make-sleeper
+                #:make-test-random-source)
+  (:import-from #:resilience-kit
                 #:attempt-timeout
                 #:attempt-timeout-timeout
                 #:bulkhead-call
@@ -54,14 +67,18 @@
                 #:current-deadline
                 #:deadline-exceeded
                 #:deadline-exceeded-attempt
+                #:deadline-exceeded-observed-at
                 #:deadline-exceeded-p
                 #:deadline-exceeded-stage
                 #:deadline-remaining
-                #:deadline-exceeded-observed-at
+                #:hedge-exhausted
+                #:hedge-exhausted-attempts
+                #:hedge-exhausted-causes
                 #:idempotency-conflict
                 #:make-bulkhead
                 #:make-cancellation-token
                 #:make-circuit-breaker
+                #:make-memory-lease-store
                 #:make-resilience-event
                 #:make-resilience-executor
                 #:make-rate-limiter
@@ -72,6 +89,9 @@
                 #:rate-limit-exceeded
                 #:rate-limit-exceeded-retry-after
                 #:rate-limiter-acquire
+                #:rate-limiter-capacity
+                #:rate-limiter-last-refill
+                #:rate-limiter-refill-rate
                 #:rate-limiter-tokens
                 #:resilience-cancelled
                 #:resilience-cancelled-reason
@@ -83,6 +103,7 @@
                 #:resilience-event-p
                 #:resilience-event-type
                 #:resilience-executor-call
+                #:resilience-executor-shutdown-p
                 #:resilience-executor-shutdown
                 #:resilience-hard-timeout
                 #:resilience-hard-timeout-backend
@@ -102,6 +123,8 @@
                 #:with-resilience-event-handler
                 #:with-retry
                 #:with-rate-limiter)
-  (:export #:run-tests))
+  (:export #:expect-macroexpansion-error
+           #:expect-pipeline-result
+           #:run-tests))
 
-(in-package #:cl-resilience-kit/test)
+(in-package #:resilience-kit/test)

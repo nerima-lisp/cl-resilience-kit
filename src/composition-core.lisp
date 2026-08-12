@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun %call-with-resilience-core
     (thunk &key retry-policy circuit-breaker bulkhead bulkhead-timeout rate-limiter

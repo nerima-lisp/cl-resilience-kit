@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit/observability-test)
+(in-package #:resilience-observability-test)
 
 (defun %observability-metric (registry name)
   (find name
@@ -12,7 +12,25 @@
         :key #'observability-kit:metric-sample-labels
         :test #'equal))
 
+(defun %expected-observability-label (value)
+  (typecase value
+    (null "unknown")
+    (string (if (string= value "") "unknown" value))
+    (symbol (string-downcase (symbol-name value)))
+    (t (princ-to-string value))))
+
 (describe "cl-observability-kit integration"
+  (it "exports the nerima-lisp package nickname"
+    (let ((package (find-package "RESILIENCE-OBSERVABILITY")))
+      (expect package :to-be-truthy)
+      (when package
+        (expect (member "RESILIENCE-OBSERVABILITY"
+                        (package-nicknames package)
+                        :test #'string=)
+                :to-be-truthy)
+        (expect (find-symbol "MAKE-RESILIENCE-OBSERVABILITY" package)
+                :to-be-truthy))))
+
   (it "publishes counters and finite event durations"
     (let* ((observability (make-resilience-observability))
            (event (make-resilience-event
@@ -210,6 +228,32 @@
                      (cons "operation" (princ-to-string operation))))
              (sample (%observability-sample snapshot labels)))
         (expect sample :to-be-truthy))))
+
+  (it-fuzz "normalizes generated label combinations through cl-weave generators"
+      ((event-type (gen-member (list nil "" :attempt :operation-complete 42)))
+       (operation (gen-member (list nil "" :read :write "checkout" 7))))
+      (:trials 16 :timeout-per-trial 1)
+    (let* ((observability (make-resilience-observability))
+           (event (make-resilience-event
+                   :type event-type
+                   :operation operation))
+           (snapshot-name "resilience_events_total")
+           (labels
+             (list (cons "event_type"
+                         (%expected-observability-label event-type))
+                   (cons "operation"
+                         (%expected-observability-label operation)))))
+      (record-resilience-event observability event)
+      (let* ((snapshot
+               (%observability-metric
+                (resilience-observability-registry observability)
+                snapshot-name))
+             (sample (%observability-sample snapshot labels)))
+        (expect sample :to-be-truthy)
+        (when sample
+          (expect (observability-kit:metric-sample-value sample)
+                  :to-be
+                  1)))))
 
   (it "does not observe absent or negative durations"
     (let* ((observability (make-resilience-observability))

@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defclass circuit-breaker ()
   ((failure-threshold
@@ -98,29 +98,29 @@ LIMIT therefore bounds concurrent probes, not merely sequential calls."
    :clock (%active-clock clock)
    :monotonic-units-per-second
    (%active-monotonic-units-per-second monotonic-units-per-second)
-   :lock (cl-concurrent-kit:make-lock :name "cl-resilience-kit.circuit-breaker")))
+   :lock (make-lock :name "cl-resilience-kit.circuit-breaker")))
 
 (defun circuit-breaker-state (breaker)
   (check-type breaker circuit-breaker)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (%circuit-breaker-state breaker)))
 
 (defun circuit-breaker-failure-count (breaker)
   (check-type breaker circuit-breaker)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (%circuit-breaker-failure-count breaker)))
 
 (defun circuit-breaker-opened-at (breaker)
   (check-type breaker circuit-breaker)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (%circuit-breaker-opened-at breaker)))
 
 (defun circuit-breaker-active-probes (breaker)
   (check-type breaker circuit-breaker)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (%circuit-breaker-active-probes breaker)))
 
 (defun circuit-breaker-generation (breaker)
   (check-type breaker circuit-breaker)
-  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+  (with-lock-held ((%circuit-breaker-lock breaker))
     (%circuit-breaker-generation breaker)))

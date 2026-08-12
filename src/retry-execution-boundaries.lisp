@@ -1,4 +1,4 @@
-(in-package #:cl-resilience-kit)
+(in-package #:resilience-kit)
 
 (defun %make-attempt-timeout
     (clock units deadline timeout operation attempt stage)
@@ -76,7 +76,9 @@
   (let ((delay (%delay-with-hint policy attempt previous-delay decision)))
     (when (and deadline
                (>= delay
-                   (max 0d0 (- deadline (%monotonic-seconds clock units)))))
+                   (%deadline-remaining-at
+                    (%monotonic-seconds clock units)
+                    deadline)))
       (%signal-deadline-exceeded clock units deadline
                                  :operation operation
                                  :stage :backoff
