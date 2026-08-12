@@ -1,8 +1,11 @@
 # API reference
 
-The package exports the public API from `cl-resilience-kit`. The signatures
-below group the main entry points by concern; inspect the source package
-definition for the complete export list.
+The public API is exported from the Nerima Lisp package
+`resilience-kit`. Compatibility nicknames remain available for
+`cl-resilience-kit`, `cl-resilience-kit/observability`, and
+`cl-resilience-kit/dataflow`. The signatures below group the main entry
+points by concern; inspect the source package definition for the complete
+export list.
 
 ## Retry and deadlines
 
@@ -10,11 +13,11 @@ definition for the complete export list.
 | --- | --- |
 | `make-retry-policy (&key max-attempts initial-delay multiplier max-delay jitter condition-classifier result-classifier retry-safe-p random-source)` | Build an explicit backoff and classification policy. |
 | `call-with-retry (policy thunk &key overall-timeout overall-deadline per-attempt-timeout clock monotonic-units-per-second sleeper operation retry-budget cancellation-token event-handler fallback)` | Invoke a thunk under cooperative retry and deadline controls. |
-| `with-retry ((policy &rest options) &body body)` | Macro wrapper for `call-with-retry`. |
+| `with-retry ((policy &rest options) &body body)` | Macro entry point for `call-with-retry`. |
 | `make-retry-budget (&key limit window clock monotonic-units-per-second)` | Create a process-local retry budget. |
 | `make-distributed-retry-budget (&key store key limit window clock monotonic-units-per-second)` | Create a retry budget backed by a state store. |
 | `call-with-deadline (thunk &key timeout deadline clock monotonic-units-per-second operation cancellation-token event-handler)` | Apply an inner or absolute cooperative deadline. |
-| `with-deadline ((&rest options) &body body)` | Macro wrapper for `call-with-deadline`. |
+| `with-deadline ((&rest options) &body body)` | Macro entry point for `call-with-deadline`. |
 
 `overall-timeout` and `overall-deadline` are mutually exclusive. A retry
 policy's `max-attempts` includes the initial invocation.
@@ -98,7 +101,7 @@ re-signaled so a broken classifier cannot be hidden by fallback.
 `resilience-event` is a best-effort observation. Its `type` and `stage` are
 implementation-defined keywords, not a closed enum; consumers should tolerate
 new values. Event handlers receive the event object, and handler errors are
-swallowed so observation cannot change operation control flow. Use the event
+isolated behind a warning so observation cannot change operation control flow. Use the event
 readers (`resilience-event-type`, `resilience-event-operation`,
 `resilience-event-attempt`, `resilience-event-stage`, `resilience-event-condition`,
 `resilience-event-result`, `resilience-event-delay`,
@@ -111,16 +114,13 @@ data.
 ```lisp
 (call-with-resilience
  thunk
- &key retry-policy circuit-breaker distributed-circuit-breaker
-      bulkhead bulkhead-timeout rate-limiter rate-limit-tokens
-      rate-limit-wait-p rate-limit-max-wait rate-limit-signal-on-reject-p
-      overall-timeout overall-deadline per-attempt-timeout
-      clock monotonic-units-per-second sleeper operation retry-budget
-      cancellation-token event-handler fallback context metrics observer
-      lifecycle executor executor-timeout hard-timeout hedge-after
-      max-hedge-attempts hedge-safe-p request-coalescer idempotency-key
-      idempotency-fingerprint)
+ &rest options)
 ```
+
+`options` is a keyword property list using the option vocabulary listed above.
+The value-returning function validates it while building the immutable
+resilience plan; the block macros also reject invalid literal options during
+macro expansion.
 
 The macro and continuation entry points keep the same option vocabulary:
 
@@ -128,14 +128,25 @@ The macro and continuation entry points keep the same option vocabulary:
 | --- | --- |
 | `with-resilience ((&rest options) &body body)` | Evaluate `body` through `call-with-resilience`. |
 | `call-with-resilience/k (thunk on-success on-error &rest options)` | Dispatch every successful value to `on-success`, or one signaled `error` condition to `on-error`. |
-| `with-resilience/k ((on-success on-error &rest options) &body body)` | Macro wrapper for the continuation boundary. |
+| `with-resilience/k ((on-success on-error &rest options) &body body)` | Macro entry point for the continuation boundary. |
 
 `with-resilience` and `with-resilience/k` validate literal option lists during
 macro expansion. Options must be keyword/value pairs from the composition
-signature, and duplicate keys are rejected. `call-with-resilience/k` keeps
+vocabulary, and duplicate keys are rejected. `call-with-resilience/k` keeps
 continuation failures visible: an error raised by either callback escapes the
 boundary instead of being sent to the other callback.
 
 The composition helper propagates the selected operation, context, time, and
 event boundaries to the nested controls. Read [Core concepts](../guide/core-concepts.md)
 before changing the order of controls for a production operation.
+
+## Optional integrations
+
+| Entry point | Purpose |
+| --- | --- |
+| `define-pipeline`, `make-node`, `make-pipeline`, `pipeline`, `pipeline->node`, `run-pipeline` | Direct `cl-dataflow` API re-exported from `resilience-dataflow`, so consuming code can stay on the Nerima Lisp package nickname while mixing plain and resilience-aware pipeline building. |
+| `define-resilience-pipeline ((&rest options) &body clauses)` | Preferred source-level API. Expand to `cl-dataflow:define-pipeline`, wrapping each `:node` handler with `call-with-resilience`. Top-level and node-local forms accept `:resilience-options`. |
+| `make-resilience-node (&key name operation inputs outputs metadata resilience-options)` | Runtime constructor for one `cl-dataflow` node whose handler runs through `call-with-resilience`. |
+| `make-resilience-pipeline (&key name operation metadata inputs outputs resilience-options)` | Runtime constructor for a one-stage `cl-dataflow` pipeline around an operation. |
+| `make-resilience-pipeline-node (&key name operation metadata inputs outputs resilience-options)` | Runtime constructor that re-exports a resilience-wrapped pipeline as an embeddable `cl-dataflow` node. |
+| `run-resilience-pipeline (pipeline &key input context parallel)` | Run a `cl-dataflow` pipeline through `cl-dataflow:run-pipeline`. |

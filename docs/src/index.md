@@ -1,9 +1,10 @@
 # cl-resilience-kit
 
-cl-resilience-kit is a set of composable, dependency-neutral resilience
-primitives for Common Lisp. It provides policies and coordination mechanisms
-without assuming a particular web framework, RPC protocol, storage backend, or
-application lifecycle.
+cl-resilience-kit is a set of composable resilience primitives for Common
+Lisp. It builds on the Nerima Lisp packages `cl-boundary-kit`,
+`cl-concurrent-kit`, and `cl-date-kit` while avoiding assumptions about a
+particular web framework, RPC protocol, storage backend, or application
+lifecycle.
 
 The library keeps policy decisions explicit and makes operational boundaries
 injectable. Clocks, random sources, sleepers, cancellation tokens, state

@@ -15,8 +15,10 @@ Its runtime dependencies are versioned directly in the system definition:
 - `cl-date-kit` 1.0.0 or newer.
 
 The optional `cl-resilience-kit/observability` system adds direct metrics
-integration with `cl-observability-kit`.  The test system additionally uses
-`cl-weave`; the production system does not load the test framework.
+integration with `cl-observability-kit`, and the optional
+`cl-resilience-kit/dataflow` system adds direct pipeline integration with
+`cl-dataflow`. The test system additionally uses `cl-weave`; the production
+system does not load the test framework.
 
 ## Flake systems
 

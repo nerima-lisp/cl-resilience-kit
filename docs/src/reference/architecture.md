@@ -4,15 +4,15 @@
 
 | Area | Source files | Responsibility |
 | --- | --- | --- |
-| Package and conditions | `src/package.lisp`, `src/conditions.lisp` | Public exports and structured failure conditions. |
+| Package and conditions | `src/package.lisp`, `src/conditions-base.lisp`, `src/conditions-retry.lisp`, `src/conditions-isolation.lisp`, `src/conditions-distributed.lisp`, `src/conditions-composition.lisp` | Public exports and structured failure conditions grouped by retry, isolation, distributed coordination, and composition concerns. |
 | Data validation | `src/data-validation.lisp` | Shared predicates for validating finite, proper input data. |
 | Context and observation | `src/context.lisp`, `src/events.lisp` | Operation metadata, metrics, and event fan-out. |
 | Time and cancellation | `src/deadline.lisp`, `src/cancellation.lisp` | Cooperative deadlines, cancellation, and injected monotonic time. |
-| Retry | `src/retry-policy.lisp`, `src/retry-execution-boundaries.lisp`, `src/retry-execution.lisp`, `src/retry.lisp`, `src/retry-budget.lisp` | Classification, backoff, attempt-boundary helpers, attempt execution, and budgets. |
-| Breakers and stores | `src/circuit-breaker-definition.lisp`, `src/circuit-breaker-state.lisp`, `src/circuit-breaker.lisp`, `src/distributed-circuit-breaker-definition.lisp`, `src/distributed-circuit-breaker-state.lisp`, `src/distributed-circuit-breaker-transition.lisp`, `src/distributed-circuit-breaker-execution.lisp`, `src/distributed-circuit-breaker-api.lisp`, `src/state-store.lisp`, `src/lease-store.lisp` | Breaker class and accessors, state transitions, the public call/reset API, and the distributed breaker's class, state, transition, execution, and public API layers. |
-| Admission | `src/bulkhead-definition.lisp`, `src/bulkhead-execution.lisp`, `src/bulkhead.lisp`, `src/rate-limiter.lisp` | Bulkhead classes, call execution, the public macro API, and token admission. |
-| Execution | `src/executor.lisp`, `src/hedging.lisp`, `src/coalescing.lisp` | Worker boundaries, speculative attempts, and request sharing. |
-| Lifecycle and composition | `src/lifecycle.lisp`, `src/composition-core.lisp`, `src/composition-plan.lisp`, `src/composition-support.lisp`, `src/composition-runtime.lisp`, `src/composition.lisp`, `src/composition-macros.lisp` | Shutdown readiness, plan data, primitive composition, execution-boundary selection, event-handler assembly, and macro/CPS entry points. |
+| Retry | `src/retry-policy.lisp`, `src/retry-scheduling.lisp`, `src/retry-budget-definition.lisp`, `src/retry-budget-execution.lisp`, `src/retry-execution-boundaries.lisp`, `src/retry-execution-recovery.lisp`, `src/retry-execution.lisp`, `src/retry.lisp` | Policy data, option normalization, classifier normalization, backoff scheduling, retry budgets, attempt-boundary helpers, recovery hooks, attempt execution, and macro entry points. |
+| Breakers and stores | `src/state-store.lisp`, `src/lease-store-definition.lisp`, `src/lease-store-execution.lisp`, `src/lease-store.lisp`, `src/circuit-breaker-definition.lisp`, `src/circuit-breaker-state.lisp`, `src/circuit-breaker.lisp`, `src/distributed-circuit-breaker-definition.lisp`, `src/distributed-circuit-breaker-state.lisp`, `src/distributed-circuit-breaker-transition.lisp`, `src/distributed-circuit-breaker-execution.lisp`, `src/distributed-circuit-breaker-api.lisp` | State-store and lease-store abstractions plus local and distributed breaker data, state transitions, execution paths, and public APIs. |
+| Admission | `src/bulkhead-definition.lisp`, `src/bulkhead-admission.lisp`, `src/bulkhead-execution.lisp`, `src/bulkhead.lisp`, `src/rate-limiter-definition.lisp`, `src/rate-limiter-execution.lisp`, `src/rate-limiter.lisp` | Bulkhead capacity data, admission control, execution wrappers, public macros, and token-bucket limiter policy and execution. |
+| Execution | `src/executor-definition.lisp`, `src/executor-execution.lisp`, `src/executor.lisp`, `src/hedging-execution.lisp`, `src/hedging.lisp`, `src/coalescing-definition.lisp`, `src/coalescing-execution.lisp`, `src/coalescing.lisp` | Worker-boundary data and execution, speculative hedging, and request coalescing definitions and runtime behavior. |
+| Lifecycle and composition | `src/lifecycle.lisp`, `src/composition-core.lisp`, `src/composition-plan.lisp`, `src/composition-support.lisp`, `src/composition-runtime-context.lisp`, `src/composition-runtime-execution.lisp`, `src/composition-runtime-dispatch.lisp`, `src/composition.lisp`, `src/composition-macros.lisp` | Shutdown readiness, composition-plan data, primitive composition helpers, runtime context/execution/dispatch assembly, and macro/CPS entry points. |
 
 `src/package.lisp` is the public surface. Internal helpers remain package
 private so integrations depend on the exported contracts rather than on state
@@ -57,5 +57,6 @@ decision instead of inferring safety from a generic error type.
 The local breaker, local retry budget, bulkheads, limiter, executor, and request
 coalescer are ordinary process-local objects. A shared store is required when
 multiple processes must observe one breaker or budget. The core has no protocol
-or transport dependency; adapters can translate context and events to an
-application's HTTP, RPC, queue, or tracing system.
+or transport dependency; applications can pass the exported context and event
+objects directly into their HTTP, RPC, queue, or tracing stack without an
+extra adapter layer.

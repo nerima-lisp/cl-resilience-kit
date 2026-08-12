@@ -1,5 +1,5 @@
 site_name: cl-resilience-kit
-site_description: Composable, dependency-neutral resilience primitives for Common Lisp
+site_description: Composable resilience primitives for Common Lisp on top of Nerima Lisp packages
 site_url: https://nerima-lisp.github.io/cl-resilience-kit/
 repo_url: https://github.com/nerima-lisp/cl-resilience-kit
 repo_name: nerima-lisp/cl-resilience-kit
@@ -42,6 +42,7 @@ nav:
   - Getting started: getting-started.md
   - Guide:
       - Core concepts: guide/core-concepts.md
+      - Dataflow integration: guide/dataflow.md
       - Observability: guide/observability.md
       - Recipes: guide/recipes.md
   - Reference:

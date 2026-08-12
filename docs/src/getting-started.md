@@ -10,8 +10,16 @@ Make the repository available to ASDF's source registry, then load the system:
 (asdf:load-system :cl-resilience-kit)
 ```
 
-The system depends on `cl-boundary-kit`, `cl-concurrent-kit`, and `cl-date-kit`.
-The test system also uses `cl-weave`.
+The production system uses the Nerima Lisp packages `cl-boundary-kit` for
+injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
+for executor timing. The optional `cl-resilience-kit/observability` system
+adds direct `cl-observability-kit` metrics, and the optional
+`cl-resilience-kit/dataflow` system wraps `cl-dataflow` pipeline handlers with
+the same resilience contracts; the test system alone uses `cl-weave`.
+
+Load the ASDF systems by their `cl-...` names, then use the shorter Nerima Lisp
+package nicknames in code: `resilience-kit`,
+`resilience-observability`, and `resilience-dataflow`.
 
 ### Nix
 
@@ -34,6 +42,8 @@ This small example retries a known temporary condition and returns `:ok` on
 the third attempt:
 
 ```common-lisp
+(in-package #:resilience-kit)
+
 (define-condition temporary-storage-error (error) ())
 
 (let ((attempts 0)

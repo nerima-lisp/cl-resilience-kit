@@ -1,10 +1,11 @@
 # cl-resilience-kit
 
-`cl-resilience-kit` provides composable, dependency-neutral resilience
-primitives for Common Lisp operations that can fail transiently: service
-calls, database access, queues, filesystem operations, and other application
-boundaries. It has no dependency on HTTP, PostgreSQL, Redis, or another
-protocol package.
+`cl-resilience-kit` provides composable resilience primitives for Common Lisp
+operations that can fail transiently: service calls, database access, queues,
+filesystem operations, and other application boundaries. It builds directly on
+the Nerima Lisp packages `cl-boundary-kit`, `cl-concurrent-kit`, and
+`cl-date-kit`, while staying independent of any specific HTTP, PostgreSQL,
+Redis, or other protocol package.
 
 The full guide is available at
 [nerima-lisp.github.io/cl-resilience-kit](https://nerima-lisp.github.io/cl-resilience-kit/),
@@ -15,6 +16,8 @@ with its source in [`docs/src`](docs/src/).
 Retry safety is explicit and belongs to the caller:
 
 ```common-lisp
+(in-package #:resilience-kit)
+
 (define-condition temporary-storage-error (error) ())
 
 (let ((attempts 0)
@@ -51,8 +54,25 @@ Make the repository available to ASDF's source registry, then load:
 (asdf:load-system :cl-resilience-kit)
 ```
 
-The system depends on `cl-boundary-kit`, `cl-concurrent-kit`, and
-`cl-date-kit`.
+The production system uses the Nerima Lisp packages `cl-boundary-kit` for
+injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
+for executor timing. The optional `cl-resilience-kit/observability` system
+adds direct `cl-observability-kit` metrics, and the optional
+`cl-resilience-kit/dataflow` system keeps the Nerima Lisp `cl-dataflow` API
+available from `resilience-dataflow` while adding the same resilience controls
+through a `define-resilience-pipeline` macro that matches `cl-dataflow`
+syntax; the test system alone depends on `cl-weave`. The development shell
+also pins the Nerima Lisp `paredit-cli` package and exposes it as the
+`paredit` command for structural linting.
+
+Load the ASDF systems by their `cl-...` names, then use the shorter Nerima Lisp
+package nicknames in code: `resilience-kit`,
+`resilience-observability`, and `resilience-dataflow`.
+
+```common-lisp
+(asdf:load-system :cl-resilience-kit)
+(in-package #:resilience-kit)
+```
 
 ### Nix
 
@@ -91,6 +111,7 @@ their state transitions.
 
 - [Getting started](docs/src/getting-started.md)
 - [Core concepts](docs/src/guide/core-concepts.md)
+- [Dataflow integration](docs/src/guide/dataflow.md)
 - [Recipes](docs/src/guide/recipes.md)
 - [API reference](docs/src/reference/api.md)
 - [Architecture](docs/src/reference/architecture.md)
@@ -111,6 +132,7 @@ nix build .#coverage
 nix build .#docs
 nix flake check
 nix fmt
+paredit inspect lint src t --fail-on error
 ```
 
 For a direct test run:
@@ -120,9 +142,19 @@ sbcl --non-interactive --no-userinit --no-sysinit \
   --load run-tests.lisp
 ```
 
-The test runner rejects an empty selection. See
+The bootstrap script accepts either adjacent nerima-lisp checkouts or the
+shared ghq bare-clone layout and materializes missing sibling sources for the
+direct run. The test runner rejects an empty selection. See
 [Development](docs/src/project/development.md) for coverage and documentation
 workflow details.
+`nix flake check` also runs the structural `paredit` lint check from the
+pinned Nerima Lisp package.
+
+The test suite uses cl-weave property and fuzz tests, polling assertions,
+continuation-value assertions, mocked boundaries, and
+explicit assertion-count contracts. The direct runner applies a 30-second
+per-test timeout; the Nix test derivation retains a 120-second process-level
+timeout for build and test startup overhead.
 
 ## Contributing
 

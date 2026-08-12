@@ -9,6 +9,8 @@ results defined by the application.
 Keep the retry decision next to the policy and make retry safety explicit:
 
 ```common-lisp
+(in-package #:resilience-kit)
+
 (define-condition temporary-storage-error (error) ())
 
 (let ((policy

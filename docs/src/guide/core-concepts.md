@@ -44,9 +44,9 @@ not a substitute for a shared durable store across processes.
 
 Event handlers and observers receive operational signals without becoming the
 protected operation's failure path. Observer errors are isolated from the
-operation. Use metrics and observers to record attempts, transitions, waits,
-and cancellations, while keeping the operation's result and conditions under
-the operation's own control.
+operation and re-expressed as warnings. Use metrics and observers to record
+attempts, transitions, waits, and cancellations, while keeping the operation's
+result and conditions under the operation's own control.
 
 ## Composition order matters
 
