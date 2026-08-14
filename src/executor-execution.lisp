@@ -32,62 +32,80 @@
   (unless timeout
     (return-from %run-with-hard-timeout
       (funcall thunk)))
-  (let ((timeout (%ensure-non-negative-real timeout "HARD-TIMEOUT"))
-        (started (%now :clock clock
-                       :monotonic-units-per-second
-                       monotonic-units-per-second)))
+  (let* ((timeout (%ensure-non-negative-real timeout "HARD-TIMEOUT"))
+         (active-clock (%active-clock clock))
+         (units (%active-monotonic-units-per-second
+                 monotonic-units-per-second))
+         (started (%monotonic-seconds active-clock units)))
     (when (zerop timeout)
       (error (%make-hard-timeout-condition
               operation timeout backend started
-              :clock clock
-              :monotonic-units-per-second
-              monotonic-units-per-second)))
+              :clock active-clock
+              :monotonic-units-per-second units)))
     (handler-case
         (with-timeout (%seconds->duration timeout)
           (funcall thunk))
       (operation-timed-out (condition)
-        (%rethrow-unless-timeout-operation
-         condition :with-timeout
-         (%make-hard-timeout-condition
-          operation timeout backend started
+        (if (%timeout-operation-matches-p condition :with-timeout)
+            (error (%make-hard-timeout-condition
+                    operation timeout backend started
+                    :clock active-clock
+                    :monotonic-units-per-second units))
+            (error condition))))))
+
+(defun %make-resilience-task-runner
+    (thunk &key hard-timeout operation backend clock monotonic-units-per-second)
+  (check-type thunk function)
+  (lambda ()
+    (%pack-resilience-values
+     (if hard-timeout
+         (%run-with-hard-timeout
+          thunk hard-timeout operation backend
           :clock clock
-          :monotonic-units-per-second
-          monotonic-units-per-second))))))
+          :monotonic-units-per-second monotonic-units-per-second)
+         (funcall thunk)))))
 
 (defun resilience-executor-try-submit
     (executor thunk &key hard-timeout operation clock monotonic-units-per-second)
   "Submit THUNK and return PROMISE and an acceptance boolean."
   (check-type executor resilience-executor)
   (check-type thunk function)
-  (multiple-value-bind (promise accepted-p)
-      (try-submit
-       (resilience-executor-implementation executor)
-       (lambda ()
-         (multiple-value-list
-          (%run-with-hard-timeout
-           thunk hard-timeout operation :executor
-           :clock clock
-           :monotonic-units-per-second
-           monotonic-units-per-second))))
-    (values promise accepted-p)))
+  (let ((implementation (%resilience-executor-implementation executor)))
+    (multiple-value-bind (promise accepted-p)
+        (try-submit
+         implementation
+         (%make-resilience-task-runner
+          thunk
+          :hard-timeout hard-timeout
+          :operation operation
+          :backend :executor
+          :clock clock
+          :monotonic-units-per-second monotonic-units-per-second))
+      (values promise accepted-p))))
 
 (defun resilience-executor-submit
     (executor thunk &key hard-timeout operation clock monotonic-units-per-second)
   "Submit THUNK, signaling RESILIENCE-EXECUTION-REJECTED when refused."
-  (multiple-value-bind (promise accepted-p)
-      (resilience-executor-try-submit executor thunk
-                                      :hard-timeout hard-timeout
-                                      :operation operation
-                                      :clock clock
-                                      :monotonic-units-per-second
-                                      monotonic-units-per-second)
-    (if accepted-p
-        promise
-        (error 'resilience-execution-rejected
-               :operation operation
-               :message "The resilience executor rejected the execution."
-               :reason :executor-rejected
-               :queue-size (resilience-executor-queue-depth executor)))))
+  (check-type executor resilience-executor)
+  (check-type thunk function)
+  (let ((implementation (%resilience-executor-implementation executor)))
+    (multiple-value-bind (promise accepted-p)
+        (try-submit
+         implementation
+         (%make-resilience-task-runner
+          thunk
+          :hard-timeout hard-timeout
+          :operation operation
+          :backend :executor
+          :clock clock
+          :monotonic-units-per-second monotonic-units-per-second))
+      (if accepted-p
+          promise
+          (error 'resilience-execution-rejected
+                 :operation operation
+                 :message "The resilience executor rejected the execution."
+                 :reason :executor-rejected
+                 :queue-size (executor-queue-depth implementation))))))
 
 (defun resilience-executor-call
     (executor thunk &key hard-timeout timeout operation clock
@@ -122,7 +140,7 @@ constraints."
   (when timeout
     (%ensure-non-negative-real timeout "EXECUTOR-SHUTDOWN-TIMEOUT"))
   (shutdown-executor
-   (resilience-executor-implementation executor)
+   (%resilience-executor-implementation executor)
    :wait wait
    :cancel-pending cancel-pending
    :timeout (and timeout (%seconds->duration timeout))))
@@ -144,9 +162,7 @@ constraints."
                   (await
                    promise :timeout (%seconds->duration timeout))
                   (await promise))))
-        (if (listp values)
-            (values-list values)
-            (values values)))
+        (%unpack-resilience-values values))
     (operation-timed-out (condition)
       (unless timeout-backend
         (error condition))
@@ -164,10 +180,12 @@ constraints."
                                   :clock clock
                                   :monotonic-units-per-second
                                   monotonic-units-per-second)
-      (future
-        (multiple-value-list
-         (%run-with-hard-timeout
-          thunk hard-timeout operation :thread
-          :clock clock
-          :monotonic-units-per-second
-          monotonic-units-per-second)))))
+      (let ((worker (%make-resilience-task-runner
+                     thunk
+                     :hard-timeout hard-timeout
+                     :operation operation
+                     :backend :thread
+                     :clock clock
+                     :monotonic-units-per-second
+                     monotonic-units-per-second)))
+        (future (funcall worker)))))

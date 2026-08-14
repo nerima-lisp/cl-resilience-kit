@@ -1,41 +1,81 @@
 (in-package #:resilience-kit)
 
+(defparameter +make-retry-decision-option-keys+
+  '(:retry-p :delay-hint :reason))
+
 (defstruct (retry-decision
-            (:constructor make-retry-decision
-                (&key (retry-p nil) delay-hint reason)))
+             (:constructor %make-retry-decision (retry-p delay-hint reason))
+             (:predicate retry-decision-p))
   "The normalized answer returned by a retry classifier."
   retry-p
   delay-hint
   reason)
 
-(defclass retry-policy ()
-  ((max-attempts
-    :initarg :max-attempts
-    :reader retry-policy-max-attempts)
-   (initial-delay
-    :initarg :initial-delay
-    :reader retry-policy-initial-delay)
-   (multiplier
-    :initarg :multiplier
-    :reader retry-policy-multiplier)
-   (max-delay
-    :initarg :max-delay
-    :reader retry-policy-max-delay)
-   (jitter
-    :initarg :jitter
-    :reader retry-policy-jitter)
-   (retry-safe-p
-    :initarg :retry-safe-p
-    :reader retry-policy-retry-safe-p)
-   (condition-classifier
-    :initarg :condition-classifier
-    :reader retry-policy-condition-classifier)
-   (result-classifier
-    :initarg :result-classifier
-    :reader retry-policy-result-classifier)
-   (random-source
-    :initarg :random-source
-    :reader retry-policy-random-source)))
+(setf (fdefinition 'make-retry-decision)
+      (lambda (&rest options)
+        (when (oddp (length options))
+          (error "MAKE-RETRY-DECISION requires an even number of keyword arguments, got ~S."
+                 options))
+        (let ((retry-p nil)
+              (delay-hint nil)
+              (reason nil))
+          (declare (optimize (speed 3) (safety 1) (debug 0)))
+          (loop for (key value) on options by #'cddr
+                do (case key
+                     (:retry-p
+                      (setf retry-p value))
+                     (:delay-hint
+                      (setf delay-hint value))
+                     (:reason
+                      (setf reason value))
+                     (otherwise
+                      (error "Unknown MAKE-RETRY-DECISION keyword ~S." key))))
+          (%make-retry-decision retry-p delay-hint reason))))
+
+(defstruct (retry-policy
+             (:constructor %make-retry-policy
+                 (max-attempts initial-delay multiplier max-delay jitter
+                  retry-safe-p condition-classifier result-classifier
+                  random-source))
+             (:conc-name %retry-policy-)
+             (:predicate retry-policy-p))
+  "Validated retry-policy configuration."
+  max-attempts
+  initial-delay
+  multiplier
+  max-delay
+  jitter
+  retry-safe-p
+  condition-classifier
+  result-classifier
+  random-source)
+
+(defun retry-policy-max-attempts (policy)
+  (%retry-policy-max-attempts policy))
+
+(defun retry-policy-initial-delay (policy)
+  (%retry-policy-initial-delay policy))
+
+(defun retry-policy-multiplier (policy)
+  (%retry-policy-multiplier policy))
+
+(defun retry-policy-max-delay (policy)
+  (%retry-policy-max-delay policy))
+
+(defun retry-policy-jitter (policy)
+  (%retry-policy-jitter policy))
+
+(defun retry-policy-retry-safe-p (policy)
+  (%retry-policy-retry-safe-p policy))
+
+(defun retry-policy-condition-classifier (policy)
+  (%retry-policy-condition-classifier policy))
+
+(defun retry-policy-result-classifier (policy)
+  (%retry-policy-result-classifier policy))
+
+(defun retry-policy-random-source (policy)
+  (%retry-policy-random-source policy))
 
 (defun %function-or-nil (value name)
   (when (and value (not (functionp value)))

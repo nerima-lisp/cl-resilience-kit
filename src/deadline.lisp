@@ -12,19 +12,24 @@ The clock's monotonic value is converted using
 MONOTONIC-UNITS-PER-SECOND.  A fake boundary clock whose values are already
 seconds therefore uses 1; the default real clock uses
 INTERNAL-TIME-UNITS-PER-SECOND."
-  (when *resilience-deadline*
-    (%deadline-remaining-at
-     (%now :clock clock
-           :monotonic-units-per-second monotonic-units-per-second)
-     *resilience-deadline*)))
+  (let ((deadline (current-deadline)))
+    (when deadline
+      (let* ((active-clock (%active-clock clock))
+             (units (%active-monotonic-units-per-second
+                     monotonic-units-per-second))
+             (now (%monotonic-seconds active-clock units)))
+        (max 0d0 (- deadline now))))))
 
 (defun deadline-exceeded-p
     (&key clock monotonic-units-per-second)
   "Return true when the active monotonic deadline has elapsed."
-  (and *resilience-deadline*
-       (>= (%now :clock clock
-                 :monotonic-units-per-second monotonic-units-per-second)
-           *resilience-deadline*)))
+  (let ((deadline (current-deadline)))
+    (when deadline
+      (let* ((active-clock (%active-clock clock))
+             (units (%active-monotonic-units-per-second
+                     monotonic-units-per-second)))
+        (>= (%monotonic-seconds active-clock units)
+            deadline)))))
 
 (defun call-with-deadline
     (thunk &key timeout deadline clock monotonic-units-per-second operation

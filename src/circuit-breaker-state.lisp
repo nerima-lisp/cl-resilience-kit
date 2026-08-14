@@ -13,50 +13,52 @@
    :generation generation))
 
 (defun %circuit-breaker-begin (breaker operation)
-  (with-lock-held ((%circuit-breaker-lock breaker))
-    (let ((now (%circuit-breaker-now breaker)))
-      (case (%circuit-breaker-state breaker)
+  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
+    (let* ((now (%circuit-breaker-now breaker))
+           (current-state (%circuit-breaker-state breaker))
+           (generation (%circuit-breaker-generation breaker)))
+      (case current-state
         (:closed
          (values t
                  :closed
-                 (%circuit-breaker-generation breaker)
+                 generation
                  nil))
         (:open
          (let* ((opened-at (%circuit-breaker-opened-at breaker))
+                (reset-timeout (%circuit-breaker-reset-timeout breaker))
                 (retry-at (and opened-at
-                               (+ opened-at
-                                  (circuit-breaker-reset-timeout breaker)))))
+                               (+ opened-at reset-timeout))))
            (if (and retry-at (>= now retry-at))
-               (progn
+               (let ((next-generation (1+ generation)))
                  (setf (%circuit-breaker-state breaker) :half-open
-                       (%circuit-breaker-generation breaker)
-                       (1+ (%circuit-breaker-generation breaker))
-                 (%circuit-breaker-active-probes breaker) 1
+                       (%circuit-breaker-generation breaker) next-generation
+                       (%circuit-breaker-active-probes breaker) 1
                        (%circuit-breaker-half-open-successes breaker) 0)
                  (values t
                          :half-open
-                         (%circuit-breaker-generation breaker)
+                         next-generation
                          nil))
                (values nil nil nil
                        (%circuit-open-condition
-                        :open retry-at (%circuit-breaker-generation breaker)
+                        :open retry-at generation
                         operation)))))
         (:half-open
-         (if (< (%circuit-breaker-active-probes breaker)
-                (circuit-breaker-half-open-probe-limit breaker))
+         (let ((active-probes (%circuit-breaker-active-probes breaker))
+               (probe-limit (%circuit-breaker-half-open-probe-limit breaker)))
+           (if (< active-probes probe-limit)
              (progn
                (incf (%circuit-breaker-active-probes breaker))
                (values t
                        :half-open
-                       (%circuit-breaker-generation breaker)
+                       generation
                        nil))
              (values nil nil nil
                      (%circuit-open-condition
-                      :half-open nil (%circuit-breaker-generation breaker)
-                      operation))))
+                      :half-open nil generation
+                      operation)))))
         (otherwise
          (error "Unknown circuit breaker state ~S."
-                (%circuit-breaker-state breaker)))))))
+                current-state))))))
 
 (defun %circuit-breaker-open! (breaker now)
   (setf (%circuit-breaker-state breaker) :open
@@ -69,39 +71,48 @@
 
 (defun %circuit-breaker-finish
     (breaker token-state token-generation failed-p)
-  (with-lock-held ((%circuit-breaker-lock breaker))
+  (cl-concurrent-kit:with-lock-held ((%circuit-breaker-lock breaker))
     ;; A completion from an obsolete generation cannot overwrite a newer
     ;; reset, close, or reopen transition.
-    (when (= token-generation (%circuit-breaker-generation breaker))
-      (case token-state
+    (let ((current-generation (%circuit-breaker-generation breaker)))
+      (when (= token-generation current-generation)
+        (case token-state
           (:closed
            (when (eq (%circuit-breaker-state breaker) :closed)
              (if failed-p
-                 (progn
-                   (incf (%circuit-breaker-failure-count breaker))
-                   (when (>= (%circuit-breaker-failure-count breaker)
-                             (circuit-breaker-failure-threshold breaker))
-                     (%circuit-breaker-open!
-                      breaker (%circuit-breaker-now breaker))))
+                 (let* ((next-failure-count
+                          (1+ (%circuit-breaker-failure-count breaker)))
+                        (failure-threshold
+                          (%circuit-breaker-failure-threshold breaker)))
+                   (if (>= next-failure-count failure-threshold)
+                       (%circuit-breaker-open!
+                        breaker (%circuit-breaker-now breaker))
+                       (setf (%circuit-breaker-failure-count breaker)
+                             next-failure-count)))
                  (setf (%circuit-breaker-failure-count breaker) 0))))
           (:half-open
            (when (eq (%circuit-breaker-state breaker) :half-open)
-             (setf (%circuit-breaker-active-probes breaker)
-                   (max 0 (1- (%circuit-breaker-active-probes breaker))))
+             (let ((remaining-probes
+                     (max 0 (1- (%circuit-breaker-active-probes breaker)))))
+               (setf (%circuit-breaker-active-probes breaker)
+                     remaining-probes))
              (if failed-p
                  (%circuit-breaker-open!
                   breaker (%circuit-breaker-now breaker))
-                 (progn
-                   (incf (%circuit-breaker-half-open-successes breaker))
-                   (when (>= (%circuit-breaker-half-open-successes breaker)
-                             (circuit-breaker-success-threshold breaker))
-                     (setf (%circuit-breaker-state breaker) :closed
-                           (%circuit-breaker-opened-at breaker) nil
-                           (%circuit-breaker-failure-count breaker) 0
-                           (%circuit-breaker-active-probes breaker) 0
-                           (%circuit-breaker-half-open-successes breaker) 0
-                           (%circuit-breaker-generation breaker)
-                           (1+ (%circuit-breaker-generation breaker))))))))))))
+                 (let* ((next-success-count
+                          (1+ (%circuit-breaker-half-open-successes breaker)))
+                        (success-threshold
+                          (%circuit-breaker-success-threshold breaker)))
+                   (if (>= next-success-count success-threshold)
+                       (setf (%circuit-breaker-state breaker) :closed
+                             (%circuit-breaker-opened-at breaker) nil
+                             (%circuit-breaker-failure-count breaker) 0
+                             (%circuit-breaker-active-probes breaker) 0
+                             (%circuit-breaker-half-open-successes breaker) 0
+                             (%circuit-breaker-generation breaker)
+                             (1+ current-generation))
+                       (setf (%circuit-breaker-half-open-successes breaker)
+                             next-success-count)))))))))))
 
 (defun %circuit-breaker-finish-classified
     (breaker token-state token-generation classifier value)

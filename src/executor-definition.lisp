@@ -10,7 +10,8 @@
 (defclass resilience-executor ()
   ((implementation
     :initarg :implementation
-    :reader resilience-executor-implementation)))
+    :reader resilience-executor-implementation
+    :reader %resilience-executor-implementation)))
 
 (defun make-resilience-executor
     (&key (size 4) name queue-capacity)
@@ -28,24 +29,24 @@
 (defun resilience-executor-queue-depth (executor)
   (check-type executor resilience-executor)
   (executor-queue-depth
-   (resilience-executor-implementation executor)))
+   (%resilience-executor-implementation executor)))
 
 (defun resilience-executor-queue-capacity (executor)
   (check-type executor resilience-executor)
   (executor-queue-capacity
-   (resilience-executor-implementation executor)))
+   (%resilience-executor-implementation executor)))
 
 (defun resilience-executor-high-water-mark (executor)
   (check-type executor resilience-executor)
   (executor-high-water-mark
-   (resilience-executor-implementation executor)))
+   (%resilience-executor-implementation executor)))
 
 (defun resilience-executor-shutdown-p (executor)
   (check-type executor resilience-executor)
   (executor-shutdown-p
-   (resilience-executor-implementation executor)))
+   (%resilience-executor-implementation executor)))
 
 (defun resilience-executor-terminated-p (executor)
   (check-type executor resilience-executor)
   (executor-terminated-p
-   (resilience-executor-implementation executor)))
+   (%resilience-executor-implementation executor)))

@@ -1,5 +1,52 @@
 (in-package #:resilience-kit)
 
+(declaim (inline %execute-attempt-without-cancellation*
+                 %execute-attempt*))
+
+(defun %execute-attempt-without-cancellation*
+    (thunk clock units overall-deadline per-attempt-timeout operation attempt)
+  (if (and (null overall-deadline)
+           (null per-attempt-timeout))
+      (funcall thunk)
+      (let* ((started-at (%monotonic-seconds clock units))
+             (attempt-deadline
+               (and per-attempt-timeout (+ started-at per-attempt-timeout)))
+             (effective-deadline
+               (cond ((and overall-deadline attempt-deadline)
+                      (min overall-deadline attempt-deadline))
+                     (overall-deadline overall-deadline)
+                     (attempt-deadline attempt-deadline)
+                     (t nil)))
+             (attempt-timeout-p
+               (and attempt-deadline
+                    (or (null overall-deadline)
+                        (<= attempt-deadline overall-deadline)))))
+        (when (and effective-deadline
+                   (>= started-at effective-deadline))
+          (if attempt-timeout-p
+              (error (%make-attempt-timeout clock units effective-deadline
+                                            per-attempt-timeout operation attempt
+                                            :before-attempt))
+              (%signal-deadline-exceeded clock units effective-deadline
+                                         :operation operation
+                                         :stage :before-attempt
+                                         :attempt attempt)))
+        ;; Run post-call checks only after a normal return. A cleanup check that
+        ;; signals here would otherwise mask the condition raised by THUNK.
+        (multiple-value-prog1
+            (funcall thunk)
+          (let ((finished-at (%monotonic-seconds clock units)))
+            (when (and effective-deadline
+                       (>= finished-at effective-deadline))
+              (if attempt-timeout-p
+                  (error (%make-attempt-timeout clock units effective-deadline
+                                                per-attempt-timeout operation attempt
+                                                :attempt))
+                  (%signal-deadline-exceeded clock units effective-deadline
+                                             :operation operation
+                                             :stage :attempt
+                                             :attempt attempt))))))))
+
 (defun %make-attempt-timeout
     (clock units deadline timeout operation attempt stage)
   (make-condition
@@ -12,57 +59,32 @@
    :attempt attempt
    :timeout timeout))
 
-(defun %execute-attempt
+(defun %execute-attempt*
     (thunk clock units overall-deadline per-attempt-timeout operation attempt)
   (%check-active-cancellation-token)
-  (let* ((started-at (%monotonic-seconds clock units))
-         (attempt-deadline
-           (and per-attempt-timeout (+ started-at per-attempt-timeout)))
-         (effective-deadline
-           (cond ((and overall-deadline attempt-deadline)
-                  (min overall-deadline attempt-deadline))
-                 (overall-deadline overall-deadline)
-                 (attempt-deadline attempt-deadline)
-                 (t nil)))
-         (attempt-timeout-p
-           (and attempt-deadline
-                (or (null overall-deadline)
-                    (<= attempt-deadline overall-deadline))))
-         (*resilience-clock* clock)
-         (*resilience-monotonic-units-per-second* units)
-         (*resilience-deadline* effective-deadline))
-    (when (and effective-deadline
-               (>= (%monotonic-seconds clock units) effective-deadline))
-      (if attempt-timeout-p
-          (error (%make-attempt-timeout clock units effective-deadline
-                                        per-attempt-timeout operation attempt
-                                        :before-attempt))
-          (%signal-deadline-exceeded clock units effective-deadline
-                                     :operation operation
-                                     :stage :before-attempt
-                                     :attempt attempt)))
-    ;; Run post-call checks only after a normal return. A cleanup check that
-    ;; signals here would otherwise mask the condition raised by THUNK.
-    (multiple-value-prog1
-        (funcall thunk)
-      (%check-active-cancellation-token)
-      (when (and effective-deadline
-                 (>= (%monotonic-seconds clock units) effective-deadline))
-        (if attempt-timeout-p
-            (error (%make-attempt-timeout clock units effective-deadline
-                                          per-attempt-timeout operation attempt
-                                          :attempt))
-            (%signal-deadline-exceeded clock units effective-deadline
-                                       :operation operation
-                                       :stage :attempt
-                                       :attempt attempt))))))
+  (multiple-value-prog1
+      (%execute-attempt-without-cancellation*
+       thunk clock units overall-deadline per-attempt-timeout operation attempt)
+    (%check-active-cancellation-token)))
+
+(defun %execute-attempt
+    (thunk clock units overall-deadline per-attempt-timeout operation attempt)
+  (let ((*resilience-clock* clock)
+        (*resilience-monotonic-units-per-second* units)
+        (*resilience-deadline* overall-deadline))
+    (%execute-attempt*
+     thunk clock units overall-deadline per-attempt-timeout operation attempt)))
 
 (defun %make-retry-exhausted
     (policy attempt last-condition last-result reason operation)
   (make-condition
    'retry-exhausted
-   :message (format nil "Retry attempts were exhausted after ~D attempt~:P."
-                    attempt)
+   :message (if (= attempt 1)
+                "Retry attempts were exhausted after 1 attempt."
+                (concatenate 'string
+                             "Retry attempts were exhausted after "
+                             (write-to-string attempt)
+                             " attempts."))
    :operation operation
    :attempts attempt
    :last-condition last-condition
@@ -70,36 +92,50 @@
    :reason (or reason :max-attempts)
    :policy policy))
 
+(defun %emit-retry-boundary-event
+    (event-handler event operation attempt condition result reason clock units)
+  (%emit-resilience-event*
+   event-handler event operation attempt nil condition result nil reason
+   nil nil nil nil
+   clock units))
+
+(setf (fdefinition '%ensure-retry-delay-before-deadline)
+      (lambda (delay clock units deadline operation attempt)
+        (when deadline
+          (let ((remaining (- deadline (%monotonic-seconds clock units))))
+            (when (>= delay (if (minusp remaining) 0d0 remaining))
+              (%signal-deadline-exceeded clock units deadline
+                                         :operation operation
+                                         :stage :backoff
+                                         :attempt attempt))))))
+
+(defun %ensure-retry-budget-available
+    (retry-budget policy attempt last-condition last-result operation
+     event-handler clock units)
+  (unless (or (null retry-budget)
+              (%retry-budget-acquire retry-budget))
+    (let ((condition
+            (%make-retry-exhausted
+             policy attempt last-condition last-result
+             :retry-budget-exhausted operation)))
+      (%emit-retry-boundary-event
+       event-handler :retry-exhausted operation attempt condition nil
+       :retry-budget-exhausted clock units)
+      (error condition))))
+
 (defun %retry-delay-or-deadline
     (policy attempt previous-delay decision clock units deadline sleeper
      operation last-condition last-result retry-budget event-handler)
-  (let ((delay (%delay-with-hint policy attempt previous-delay decision)))
-    (when (and deadline
-               (>= delay
-                   (%deadline-remaining-at
-                    (%monotonic-seconds clock units)
-                    deadline)))
-      (%signal-deadline-exceeded clock units deadline
-                                 :operation operation
-                                 :stage :backoff
-                                 :attempt attempt))
-    (unless (or (null retry-budget)
-                (retry-budget-acquire retry-budget))
-      (let ((condition
-              (%make-retry-exhausted
-               policy attempt last-condition last-result
-               :retry-budget-exhausted operation)))
-        (%emit-resilience-event
-         event-handler :retry-exhausted
-         :operation operation :attempt attempt :condition condition
-         :reason :retry-budget-exhausted :clock clock
-         :monotonic-units-per-second units)
-        (error condition)))
-    (%emit-resilience-event
-     event-handler :retry-scheduled
-     :operation operation :attempt attempt :delay delay
-     :reason (retry-decision-reason decision)
-     :clock clock :monotonic-units-per-second units)
+  (let* ((delay (%delay-with-hint policy attempt previous-delay decision))
+         (reason (retry-decision-reason decision)))
+    (%ensure-retry-delay-before-deadline
+     delay clock units deadline operation attempt)
+    (%ensure-retry-budget-available
+     retry-budget policy attempt last-condition last-result operation
+     event-handler clock units)
+    (%emit-retry-boundary-event
+     event-handler :retry-scheduled operation attempt nil delay reason
+     clock units)
     (%check-active-cancellation-token)
     (when (> delay 0d0)
       (%sleep sleeper delay))
@@ -110,9 +146,8 @@
     (fallback condition event-handler operation attempt clock units)
   (if fallback
       (progn
-        (%emit-resilience-event
-         event-handler :fallback
-         :operation operation :attempt attempt :condition condition
-         :clock clock :monotonic-units-per-second units)
+        (%emit-retry-boundary-event
+         event-handler :fallback operation attempt condition nil nil
+         clock units)
         (funcall fallback condition))
       (error condition)))

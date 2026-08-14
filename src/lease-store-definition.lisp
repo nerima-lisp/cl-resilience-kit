@@ -11,22 +11,28 @@
 (defclass resilience-lease ()
   ((store
     :initarg :store
-    :reader resilience-lease-store)
+    :reader resilience-lease-store
+    :reader %resilience-lease-store)
    (key
     :initarg :key
-    :reader resilience-lease-key)
+    :reader resilience-lease-key
+    :reader %resilience-lease-key)
    (owner
     :initarg :owner
-    :reader resilience-lease-owner)
+    :reader resilience-lease-owner
+    :reader %resilience-lease-owner)
    (fencing-token
     :initarg :fencing-token
-    :reader resilience-lease-fencing-token)
+    :reader resilience-lease-fencing-token
+    :reader %resilience-lease-fencing-token)
    (expires-at
     :initarg :expires-at
-    :accessor resilience-lease-expires-at)
+    :accessor resilience-lease-expires-at
+    :accessor %resilience-lease-expires-at)
    (ttl
     :initarg :ttl
-    :accessor resilience-lease-ttl)))
+    :accessor resilience-lease-ttl
+    :accessor %resilience-lease-ttl)))
 
 (defstruct (%lease-record
             (:constructor %make-lease-record
@@ -47,7 +53,9 @@
     :reader %memory-lease-store-lock)
    (clock
     :initarg :clock
-    :reader memory-lease-store-clock)
+    :reader memory-lease-store-clock
+    :reader %memory-lease-store-clock)
    (monotonic-units-per-second
     :initarg :monotonic-units-per-second
-    :reader memory-lease-store-monotonic-units-per-second)))
+    :reader memory-lease-store-monotonic-units-per-second
+    :reader %memory-lease-store-monotonic-units-per-second)))

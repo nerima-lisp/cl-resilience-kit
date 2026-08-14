@@ -9,9 +9,11 @@
 
 (defun %remove-coalesced-request (coalescer key promise)
   (with-lock-held ((%request-coalescer-lock coalescer))
-    (let ((entry (gethash key (%request-coalescer-entries coalescer))))
-      (when (and entry (eq (getf entry :promise) promise))
-        (remhash key (%request-coalescer-entries coalescer))))))
+    (let* ((entries (%request-coalescer-entries coalescer))
+           (entry (gethash key entries)))
+      (when (and entry
+                 (eq (%coalesced-request-promise entry) promise))
+        (remhash key entries)))))
 
 (defun call-with-request-coalescing
     (coalescer thunk &key key idempotency-fingerprint executor hard-timeout
@@ -22,10 +24,10 @@ This execution layer is process-local. A non-equal fingerprint for an in-flight 
 signals IDEMPOTENCY-CONFLICT instead of joining an ambiguous operation."
   (check-type coalescer request-coalescer)
   (check-type thunk function)
-  (let ((key (or key
-                 (and (current-resilience-context)
-                      (resilience-context-idempotency-key
-                       (current-resilience-context))))))
+  (let* ((active-context (current-resilience-context))
+         (key (or key
+                  (and active-context
+                       (resilience-context-idempotency-key active-context)))))
     (unless key
       (error 'idempotency-key-required
              :operation operation
@@ -33,41 +35,47 @@ signals IDEMPOTENCY-CONFLICT instead of joining an ambiguous operation."
     (let ((owner-p nil)
           (promise nil))
       (with-lock-held ((%request-coalescer-lock coalescer))
-        (let ((entry (gethash key (%request-coalescer-entries coalescer))))
+        (let* ((entries (%request-coalescer-entries coalescer))
+               (entry (gethash key entries)))
           (if entry
               (progn
-                (when (or (and (getf entry :fingerprint)
-                               (not (equal (getf entry :fingerprint)
-                                           idempotency-fingerprint)))
-                          (and (null (getf entry :fingerprint))
+                (let ((fingerprint (%coalesced-request-fingerprint entry)))
+                  (when (or (and fingerprint
+                                 (not (equal fingerprint
+                                             idempotency-fingerprint)))
+                            (and (null fingerprint)
                                idempotency-fingerprint))
-                  (error 'idempotency-conflict
-                         :operation operation
-                         :message "An in-flight idempotency key has a different fingerprint."
-                         :key key
-                         :existing-value (getf entry :fingerprint)))
-                (setf promise (getf entry :promise)))
+                    (error 'idempotency-conflict
+                           :operation operation
+                           :message "An in-flight idempotency key has a different fingerprint."
+                           :key key
+                           :existing-value fingerprint)))
+                (setf promise (%coalesced-request-promise entry)))
               (progn
                 (setf promise (make-promise)
                       owner-p t)
-                (setf (gethash key (%request-coalescer-entries coalescer))
-                      (list :promise promise
-                            :fingerprint idempotency-fingerprint))))))
+                (setf (gethash key entries)
+                      (%make-coalesced-request promise
+                                               idempotency-fingerprint))))))
       (when owner-p
-        (let ((worker
-                (lambda ()
+        (let* ((operation-runner
+                 (%make-resilience-task-runner
+                  thunk
+                  :hard-timeout hard-timeout
+                  :operation operation
+                  :backend :coalescer
+                  :clock clock
+                  :monotonic-units-per-second
+                  monotonic-units-per-second))
+               (worker
+                 (lambda ()
                   (let ((settled-p nil))
                     (unwind-protect
                          (handler-case
                              (progn
                                (deliver
                                 promise
-                                (multiple-value-list
-                                 (%run-with-hard-timeout
-                                  thunk hard-timeout operation :coalescer
-                                  :clock clock
-                                  :monotonic-units-per-second
-                                  monotonic-units-per-second)))
+                                (funcall operation-runner))
                                (setf settled-p t))
                            (control-error (condition)
                              (declare (ignore condition)))
@@ -86,11 +94,11 @@ signals IDEMPOTENCY-CONFLICT instead of joining an ambiguous operation."
                       (%remove-coalesced-request coalescer key promise))))))
           (handler-case
               (if executor
-                  (resilience-executor-submit executor worker
-                                              :operation operation
-                                              :clock clock
-                                              :monotonic-units-per-second
-                                              monotonic-units-per-second)
+                  (resilience-executor-submit
+                   executor worker
+                   :operation operation
+                   :clock clock
+                   :monotonic-units-per-second monotonic-units-per-second)
                   (future (funcall worker)))
             (error (condition)
               (%remove-coalesced-request coalescer key promise)

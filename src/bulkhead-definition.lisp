@@ -3,7 +3,8 @@
 (defclass bulkhead ()
   ((limit
     :initarg :limit
-    :reader bulkhead-limit)
+    :reader bulkhead-limit
+    :reader %bulkhead-limit)
    (%in-flight
     :initform 0
     :accessor %bulkhead-in-flight)
@@ -37,7 +38,8 @@ queue."
 (defclass queued-bulkhead (bulkhead)
   ((max-queue
     :initarg :max-queue
-    :reader queued-bulkhead-max-queue)
+    :reader queued-bulkhead-max-queue
+    :reader %queued-bulkhead-max-queue)
    (%waiting
     :initform 0
     :accessor %queued-bulkhead-waiting)

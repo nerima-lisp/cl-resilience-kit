@@ -4,7 +4,8 @@
   ((parent
     :initarg :parent
     :initform nil
-    :reader cancellation-token-parent)
+    :reader cancellation-token-parent
+    :reader %cancellation-token-parent)
    (%cancelled-p
     :initform nil
     :accessor %cancellation-token-cancelled-p)
@@ -32,25 +33,25 @@ parent token's cancellation is visible to every descendant token."
     (values (%cancellation-token-cancelled-p token)
             (%cancellation-token-reason token))))
 
+(defun %cancellation-token-state (token)
+  (multiple-value-bind (cancelled-p reason)
+      (%cancellation-token-local-state token)
+    (if cancelled-p
+        (values t reason)
+        (let ((parent (%cancellation-token-parent token)))
+          (if parent
+              (%cancellation-token-state parent)
+              (values nil nil))))))
+
 (defun cancellation-token-cancelled-p (token)
   "Return true when TOKEN or one of its parents has been cancelled."
   (check-type token cancellation-token)
-  (multiple-value-bind (cancelled-p reason)
-      (%cancellation-token-local-state token)
-    (declare (ignore reason))
-    (or cancelled-p
-        (let ((parent (cancellation-token-parent token)))
-          (and parent (cancellation-token-cancelled-p parent))))))
+  (nth-value 0 (%cancellation-token-state token)))
 
 (defun cancellation-token-reason (token)
   "Return the local cancellation reason, or the nearest parent reason."
   (check-type token cancellation-token)
-  (multiple-value-bind (cancelled-p reason)
-      (%cancellation-token-local-state token)
-    (if cancelled-p
-        reason
-        (let ((parent (cancellation-token-parent token)))
-          (and parent (cancellation-token-reason parent))))))
+  (nth-value 1 (%cancellation-token-state token)))
 
 (defun cancel-cancellation-token (token &rest arguments)
   "Cancel TOKEN and return it.
@@ -61,10 +62,10 @@ stable for observers."
   (check-type token cancellation-token)
   (let ((reason
           (cond ((null arguments) :cancelled)
-                ((= (length arguments) 1) (first arguments))
-                ((and (= (length arguments) 2)
-                      (eq (first arguments) :reason))
-                 (second arguments))
+                ((null (cdr arguments)) (car arguments))
+                ((and (null (cddr arguments))
+                      (eq (car arguments) :reason))
+                 (cadr arguments))
                 (t
                  (error "CANCEL-CANCELLATION-TOKEN accepts an optional reason.")))))
     (with-lock-held ((%cancellation-token-lock token))
@@ -73,20 +74,25 @@ stable for observers."
               (%cancellation-token-reason token) reason)))
     token))
 
+(defun %check-cancellation-token (token)
+  (multiple-value-bind (cancelled-p reason)
+      (%cancellation-token-state token)
+    (when cancelled-p
+      (error 'resilience-cancelled
+             :message (format nil "The resilience operation was cancelled~@[ (~A)~]."
+                              reason)
+             :token token
+             :reason reason)))
+  nil)
+
 (defun check-cancellation-token (token)
   "Signal RESILIENCE-CANCELLED when TOKEN or an ancestor is cancelled."
   (check-type token cancellation-token)
-  (when (cancellation-token-cancelled-p token)
-    (error 'resilience-cancelled
-           :message (format nil "The resilience operation was cancelled~@[ (~A)~]."
-                            (cancellation-token-reason token))
-           :token token
-           :reason (cancellation-token-reason token)))
-  nil)
+  (%check-cancellation-token token))
 
 (defun %active-cancellation-token (token)
   (or token *resilience-cancellation-token*))
 
 (defun %check-active-cancellation-token ()
   (when *resilience-cancellation-token*
-    (check-cancellation-token *resilience-cancellation-token*)))
+    (%check-cancellation-token *resilience-cancellation-token*)))

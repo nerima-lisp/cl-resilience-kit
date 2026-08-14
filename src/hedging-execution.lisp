@@ -82,43 +82,55 @@ Loser attempts are not forcefully cancelled by the underlying promise API."
   (check-type thunk function)
   (check-type max-attempts (integer 1 *))
   (%ensure-non-negative-real hedge-after "HEDGE-AFTER")
-  (%ensure-hedging-safe max-attempts hedge-safe-p idempotency-key operation)
-  (%check-hedging-cancellation-token cancellation-token)
-  (when (= max-attempts 1)
-    (return-from call-with-hedging
-      (%call-single-hedge-attempt
-       thunk
-       :executor executor
-       :hard-timeout hard-timeout
-       :operation operation
-       :clock clock
-       :monotonic-units-per-second monotonic-units-per-second)))
-  (let ((promises nil)
-        (causes nil))
-    (labels ((launch ()
-               (push (%submit-hedge-promise
-                      thunk
-                      :executor executor
-                      :hard-timeout hard-timeout
-                      :operation operation
-                      :cancellation-token cancellation-token
-                      :clock clock
-                      :monotonic-units-per-second
-                      monotonic-units-per-second)
-                     promises)))
-      (launch)
-      (unless (zerop hedge-after)
-        (multiple-value-bind (result condition completedp)
-            (%await-primary-hedge-window (first promises) hedge-after)
-          (when completedp
-            (return-from call-with-hedging result))
-          (when condition
-            (push condition causes))))
-      (loop repeat (1- max-attempts) do (launch))
-      (handler-case
-          (%await-resilience-promise
-           (promise-any (nreverse promises))
-           nil)
-        (promise-all-failed (condition)
-          (%signal-hedge-exhausted
-           condition causes operation max-attempts))))))
+  (let* ((active-context (current-resilience-context))
+         (key (or idempotency-key
+                  (and active-context
+                       (resilience-context-idempotency-key active-context)))))
+    (%ensure-hedging-safe max-attempts hedge-safe-p key operation)
+    (%check-hedging-cancellation-token cancellation-token)
+    (labels ((submit-attempt ()
+               (%submit-resilience-promise
+                thunk
+                :executor executor
+                :hard-timeout hard-timeout
+                :operation operation
+                :clock clock
+                :monotonic-units-per-second
+                monotonic-units-per-second))
+             (run-single-attempt ()
+               (if executor
+                   (%await-resilience-promise (submit-attempt) nil)
+                   (if hard-timeout
+                       (%run-with-hard-timeout
+                        thunk hard-timeout operation :thread
+                        :clock clock
+                        :monotonic-units-per-second
+                        monotonic-units-per-second)
+                       (funcall thunk)))))
+      (when (= max-attempts 1)
+        (return-from call-with-hedging (run-single-attempt)))
+      (let ((promises nil)
+            (causes nil))
+        (labels ((launch ()
+                   (%check-hedging-cancellation-token cancellation-token)
+                   (let ((promise (submit-attempt)))
+                     (push promise promises)
+                     promise)))
+          (let ((first-promise (launch)))
+            (unless (zerop hedge-after)
+              (multiple-value-bind (result condition completedp)
+                  (%await-primary-hedge-window first-promise hedge-after)
+                (when completedp
+                  (return-from call-with-hedging result))
+                (when condition
+                  (push condition causes))))
+            (handler-case
+                (%await-resilience-promise
+                 (promise-any
+                  (cons first-promise
+                        (loop repeat (1- max-attempts)
+                              collect (launch))))
+                 nil)
+              (promise-all-failed (condition)
+                (%signal-hedge-exhausted
+                 condition causes operation max-attempts)))))))))

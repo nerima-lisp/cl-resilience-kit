@@ -50,11 +50,11 @@
 (defun make-memory-state-store (&key name)
   (make-instance
    'memory-state-store
-   :lock (make-lock
+   :lock (cl-concurrent-kit:make-lock
           :name (or name "cl-resilience-kit.memory-state-store"))))
 
 (defmethod state-store-get ((store memory-state-store) key)
-  (with-lock-held ((%memory-state-store-lock store))
+  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
     (let ((record (gethash key (%memory-state-store-records store))))
       (if record
           (values (copy-tree (%state-record-value record))
@@ -63,7 +63,7 @@
 
 (defmethod state-store-put-if-version
     ((store memory-state-store) key value expected-version)
-  (with-lock-held ((%memory-state-store-lock store))
+  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
     (let* ((records (%memory-state-store-records store))
            (record (gethash key records))
            (actual-version (and record (%state-record-version record))))
@@ -80,7 +80,7 @@
 
 (defmethod state-store-delete-if-version
     ((store memory-state-store) key expected-version)
-  (with-lock-held ((%memory-state-store-lock store))
+  (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
     (let* ((records (%memory-state-store-records store))
            (record (gethash key records))
            (actual-version (and record (%state-record-version record))))
@@ -95,12 +95,14 @@
 
 (defmethod state-store-scan-prefix ((store memory-state-store) prefix)
   (check-type prefix string)
-  (with-lock-held ((%memory-state-store-lock store))
-    (loop for key being the hash-keys of (%memory-state-store-records store)
-          for record = (gethash key (%memory-state-store-records store))
+  (let ((prefix-length (length prefix)))
+    (cl-concurrent-kit:with-lock-held ((%memory-state-store-lock store))
+      (let ((records (%memory-state-store-records store)))
+        (loop for key being the hash-keys of records
+              using (hash-value record)
           when (and (stringp key)
-                    (<= (length prefix) (length key))
-                    (string= prefix key :end2 (length prefix)))
-            collect (list key
-                          (copy-tree (%state-record-value record))
-                          (%state-record-version record)))))
+                    (<= prefix-length (length key))
+                    (string= prefix key :end2 prefix-length))
+                collect (list key
+                              (copy-tree (%state-record-value record))
+                              (%state-record-version record)))))))

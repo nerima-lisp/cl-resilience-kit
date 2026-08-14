@@ -3,19 +3,24 @@
 (defclass rate-limiter ()
   ((capacity
     :initarg :capacity
-    :reader rate-limiter-capacity)
+    :reader rate-limiter-capacity
+    :reader %rate-limiter-capacity)
    (refill-rate
     :initarg :refill-rate
-    :reader rate-limiter-refill-rate)
+    :reader rate-limiter-refill-rate
+    :reader %rate-limiter-refill-rate)
    (clock
     :initarg :clock
-    :reader rate-limiter-clock)
+    :reader rate-limiter-clock
+    :reader %rate-limiter-clock)
    (monotonic-units-per-second
     :initarg :monotonic-units-per-second
-    :reader rate-limiter-monotonic-units-per-second)
+    :reader rate-limiter-monotonic-units-per-second
+    :reader %rate-limiter-monotonic-units-per-second)
    (sleeper
     :initarg :sleeper
-    :reader rate-limiter-sleeper)
+    :reader rate-limiter-sleeper
+    :reader %rate-limiter-sleeper)
    (%tokens
     :initarg :tokens
     :accessor %rate-limiter-tokens)

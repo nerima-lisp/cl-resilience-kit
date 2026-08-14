@@ -5,43 +5,56 @@
 (defclass distributed-circuit-breaker ()
   ((failure-threshold
     :initarg :failure-threshold
-    :reader distributed-circuit-breaker-failure-threshold)
+    :reader distributed-circuit-breaker-failure-threshold
+    :reader %distributed-circuit-breaker-failure-threshold)
    (reset-timeout
     :initarg :reset-timeout
-    :reader distributed-circuit-breaker-reset-timeout)
+    :reader distributed-circuit-breaker-reset-timeout
+    :reader %distributed-circuit-breaker-reset-timeout)
    (half-open-probe-limit
     :initarg :half-open-probe-limit
-    :reader distributed-circuit-breaker-half-open-probe-limit)
+    :reader distributed-circuit-breaker-half-open-probe-limit
+    :reader %distributed-circuit-breaker-half-open-probe-limit)
    (success-threshold
     :initarg :success-threshold
-    :reader distributed-circuit-breaker-success-threshold)
+    :reader distributed-circuit-breaker-success-threshold
+    :reader %distributed-circuit-breaker-success-threshold)
    (condition-classifier
     :initarg :condition-classifier
-    :reader distributed-circuit-breaker-condition-classifier)
+    :reader distributed-circuit-breaker-condition-classifier
+    :reader %distributed-circuit-breaker-condition-classifier)
    (result-classifier
     :initarg :result-classifier
-    :reader distributed-circuit-breaker-result-classifier)
+    :reader distributed-circuit-breaker-result-classifier
+    :reader %distributed-circuit-breaker-result-classifier)
    (clock
     :initarg :clock
-    :reader distributed-circuit-breaker-clock)
+    :reader distributed-circuit-breaker-clock
+    :reader %distributed-circuit-breaker-clock)
    (monotonic-units-per-second
     :initarg :monotonic-units-per-second
-    :reader distributed-circuit-breaker-monotonic-units-per-second)
+    :reader distributed-circuit-breaker-monotonic-units-per-second
+    :reader %distributed-circuit-breaker-monotonic-units-per-second)
    (store
     :initarg :store
-    :reader distributed-circuit-breaker-store)
+    :reader distributed-circuit-breaker-store
+    :reader %distributed-circuit-breaker-store)
    (key
     :initarg :key
-    :reader distributed-circuit-breaker-key)
+    :reader distributed-circuit-breaker-key
+    :reader %distributed-circuit-breaker-key)
    (lease-store
     :initarg :lease-store
-    :reader distributed-circuit-breaker-lease-store)
+    :reader distributed-circuit-breaker-lease-store
+    :reader %distributed-circuit-breaker-lease-store)
    (lease-owner
     :initarg :lease-owner
-    :reader distributed-circuit-breaker-lease-owner)
+    :reader distributed-circuit-breaker-lease-owner
+    :reader %distributed-circuit-breaker-lease-owner)
    (lease-ttl
     :initarg :lease-ttl
-    :reader distributed-circuit-breaker-lease-ttl)))
+    :reader distributed-circuit-breaker-lease-ttl
+    :reader %distributed-circuit-breaker-lease-ttl)))
 
 (defun make-distributed-circuit-breaker
     (&key store key

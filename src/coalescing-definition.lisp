@@ -9,6 +9,11 @@
     :initform (make-hash-table :test #'equal)
     :reader %request-coalescer-entries)))
 
+(defstruct (%coalesced-request
+            (:constructor %make-coalesced-request (promise fingerprint)))
+  promise
+  fingerprint)
+
 (defun make-request-coalescer ()
   (make-instance 'request-coalescer))
 

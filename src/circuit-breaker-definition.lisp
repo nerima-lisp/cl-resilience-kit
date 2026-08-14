@@ -3,28 +3,36 @@
 (defclass circuit-breaker ()
   ((failure-threshold
     :initarg :failure-threshold
-    :reader circuit-breaker-failure-threshold)
+    :reader circuit-breaker-failure-threshold
+    :reader %circuit-breaker-failure-threshold)
    (reset-timeout
     :initarg :reset-timeout
-    :reader circuit-breaker-reset-timeout)
+    :reader circuit-breaker-reset-timeout
+    :reader %circuit-breaker-reset-timeout)
    (half-open-probe-limit
     :initarg :half-open-probe-limit
-    :reader circuit-breaker-half-open-probe-limit)
+    :reader circuit-breaker-half-open-probe-limit
+    :reader %circuit-breaker-half-open-probe-limit)
    (success-threshold
     :initarg :success-threshold
-    :reader circuit-breaker-success-threshold)
+    :reader circuit-breaker-success-threshold
+    :reader %circuit-breaker-success-threshold)
    (condition-classifier
     :initarg :condition-classifier
-    :reader circuit-breaker-condition-classifier)
+    :reader circuit-breaker-condition-classifier
+    :reader %circuit-breaker-condition-classifier)
    (result-classifier
     :initarg :result-classifier
-    :reader circuit-breaker-result-classifier)
+    :reader circuit-breaker-result-classifier
+    :reader %circuit-breaker-result-classifier)
    (clock
     :initarg :clock
-    :reader circuit-breaker-clock)
+    :reader circuit-breaker-clock
+    :reader %circuit-breaker-clock)
    (monotonic-units-per-second
     :initarg :monotonic-units-per-second
-    :reader circuit-breaker-monotonic-units-per-second)
+    :reader circuit-breaker-monotonic-units-per-second
+    :reader %circuit-breaker-monotonic-units-per-second)
    (lock
     :initarg :lock
     :reader %circuit-breaker-lock)
@@ -54,8 +62,8 @@
 
 (defun %circuit-breaker-now (breaker)
   (%monotonic-seconds
-   (circuit-breaker-clock breaker)
-   (circuit-breaker-monotonic-units-per-second breaker)))
+   (%circuit-breaker-clock breaker)
+   (%circuit-breaker-monotonic-units-per-second breaker)))
 
 (defun make-circuit-breaker
     (&key (failure-threshold 5)

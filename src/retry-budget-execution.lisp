@@ -1,42 +1,57 @@
-(in-package #:resilience-kit)
-
-(defun %distributed-retry-budget-now (budget)
+(defun %retry-budget-now (budget)
   (%monotonic-seconds
    (%retry-budget-clock budget)
    (%retry-budget-monotonic-units-per-second budget)))
 
+(defun %make-distributed-retry-budget-state (window-start used)
+  (cons window-start used))
+
+(defun %distributed-retry-budget-state-window-start (state)
+  (car state))
+
+(defun %distributed-retry-budget-state-used (state)
+  (cdr state))
+
 (defun %distributed-retry-budget-state (budget value now)
-  (let ((window-start (and (%proper-list-p value)
-                           (getf value :window-start)))
-        (used (and (%proper-list-p value) (getf value :used))))
+  (let (window-start used)
+    (cond
+      ((consp value)
+       (if (keywordp (car value))
+           (when (%proper-list-p value)
+             (setf window-start (getf value :window-start)
+                   used (getf value :used)))
+           (setf window-start (car value)
+                 used (cdr value))))
+      ((null value)))
     (if (and (%finite-real-p window-start)
              (integerp used)
              (>= used 0))
-        (if (>= (- now window-start) (retry-budget-window budget))
-            (list :window-start now :used 0)
-            (list :window-start (float window-start 1d0) :used used))
+        (if (>= (- now window-start) (%retry-budget-window budget))
+            (%make-distributed-retry-budget-state now 0)
+            (%make-distributed-retry-budget-state
+             (float window-start 1d0)
+             used))
         (if (null value)
-            (list :window-start now :used 0)
+            (%make-distributed-retry-budget-state now 0)
             (error 'resilience-store-error
-                   :key (distributed-retry-budget-key budget)
+                   :key (%distributed-retry-budget-key budget)
                    :message "The distributed retry budget record is malformed.
-Expected a plist with numeric :WINDOW-START and non-negative integer :USED.")))))
+Expected numeric window-start and non-negative integer used values.")))))
 
 (defun %distributed-retry-budget-read (budget)
-  (multiple-value-bind (value version)
-      (state-store-get (distributed-retry-budget-store budget)
-                       (distributed-retry-budget-key budget))
-    (let ((now (%distributed-retry-budget-now budget)))
+  (let ((store (%distributed-retry-budget-store budget))
+        (key (%distributed-retry-budget-key budget))
+        (now (%retry-budget-now budget)))
+    (multiple-value-bind (value version)
+        (state-store-get store key)
       (values (%distributed-retry-budget-state budget value now)
               version
               now))))
 
 (defun %distributed-retry-budget-write (budget state version)
-  (state-store-put-if-version
-   (distributed-retry-budget-store budget)
-   (distributed-retry-budget-key budget)
-   state
-   version))
+  (let ((store (%distributed-retry-budget-store budget))
+        (key (%distributed-retry-budget-key budget)))
+    (state-store-put-if-version store key state version)))
 
 (defun %distributed-retry-budget-update (budget update)
   (loop repeat 64
@@ -49,79 +64,81 @@ Expected a plist with numeric :WINDOW-START and non-negative integer :USED."))))
                    (handler-case
                        (progn
                          (%distributed-retry-budget-write budget
-                                                          new-state
-                                                          version)
+                                                           new-state
+                                                           version)
                          (return-from %distributed-retry-budget-update result))
                      (resilience-store-conflict (condition)
                        (declare (ignore condition))))))))
   (error 'resilience-store-error
-         :key (distributed-retry-budget-key budget)
+         :key (%distributed-retry-budget-key budget)
          :message "The distributed retry budget could not commit after repeated store conflicts."))
+
+(defun %retry-budget-refresh! (budget now)
+  (when (>= (- now (%retry-budget-window-start budget))
+            (%retry-budget-window budget))
+    (setf (%retry-budget-window-start budget) now
+          (%retry-budget-used budget) 0))
+  budget)
 
 (defun retry-budget-used (budget)
   "Return the number of retry tokens consumed in the active window."
   (check-type budget retry-budget)
   (when (typep budget 'distributed-retry-budget)
-    (with-lock-held ((%retry-budget-lock budget))
-      (multiple-value-bind (state version now)
+    (cl-concurrent-kit:with-lock-held ((%retry-budget-lock budget))
+      (multiple-value-bind (state version)
           (%distributed-retry-budget-read budget)
         (declare (ignore version))
-        (return-from retry-budget-used
-          (getf (%distributed-retry-budget-state budget state now)
-                :used)))))
-  (with-lock-held ((%retry-budget-lock budget))
-    (%retry-budget-refresh!
-     budget
-     (%monotonic-seconds
-      (%retry-budget-clock budget)
-      (%retry-budget-monotonic-units-per-second budget)))
+        (let ((used (%distributed-retry-budget-state-used state)))
+          (return-from retry-budget-used used)))))
+  (cl-concurrent-kit:with-lock-held ((%retry-budget-lock budget))
+    (%retry-budget-refresh! budget (%retry-budget-now budget))
     (%retry-budget-used budget)))
 
 (defun retry-budget-remaining (budget)
   "Return the number of retry tokens still available in the window."
   (check-type budget retry-budget)
   (when (typep budget 'distributed-retry-budget)
-    (with-lock-held ((%retry-budget-lock budget))
-      (multiple-value-bind (state version now)
-          (%distributed-retry-budget-read budget)
-        (declare (ignore version))
-        (return-from retry-budget-remaining
-          (- (retry-budget-limit budget)
-             (getf (%distributed-retry-budget-state budget state now)
-                   :used))))))
-  (with-lock-held ((%retry-budget-lock budget))
-    (%retry-budget-refresh!
-     budget
-     (%monotonic-seconds
-      (%retry-budget-clock budget)
-      (%retry-budget-monotonic-units-per-second budget)))
-    (- (retry-budget-limit budget) (%retry-budget-used budget))))
+    (cl-concurrent-kit:with-lock-held ((%retry-budget-lock budget))
+      (let ((limit (%retry-budget-limit budget)))
+        (multiple-value-bind (state version)
+            (%distributed-retry-budget-read budget)
+          (declare (ignore version))
+          (let ((used (%distributed-retry-budget-state-used state)))
+            (return-from retry-budget-remaining
+              (- limit used)))))))
+  (cl-concurrent-kit:with-lock-held ((%retry-budget-lock budget))
+    (let ((limit (%retry-budget-limit budget)))
+      (%retry-budget-refresh! budget (%retry-budget-now budget))
+      (- limit (%retry-budget-used budget)))))
+
+(defun %retry-budget-acquire (budget)
+  (when (typep budget 'distributed-retry-budget)
+    (return-from %retry-budget-acquire
+      (cl-concurrent-kit:with-lock-held ((%retry-budget-lock budget))
+        (let ((limit (%retry-budget-limit budget)))
+          (%distributed-retry-budget-update
+           budget
+           (lambda (state now)
+             (declare (ignore now))
+             (let* ((used (%distributed-retry-budget-state-used state))
+                    (window-start
+                      (%distributed-retry-budget-state-window-start state)))
+               (if (< used limit)
+                   (values (%make-distributed-retry-budget-state
+                            window-start
+                            (1+ used))
+                           t)
+                   (values nil nil)))))))))
+  (cl-concurrent-kit:with-lock-held ((%retry-budget-lock budget))
+    (let ((limit (%retry-budget-limit budget)))
+      (%retry-budget-refresh! budget (%retry-budget-now budget))
+      (if (< (%retry-budget-used budget) limit)
+          (progn
+            (incf (%retry-budget-used budget))
+            t)
+          nil))))
 
 (defun retry-budget-acquire (budget)
   "Authorize one retry and consume one token, or return NIL when exhausted."
   (check-type budget retry-budget)
-  (when (typep budget 'distributed-retry-budget)
-    (return-from retry-budget-acquire
-      (with-lock-held ((%retry-budget-lock budget))
-        (%distributed-retry-budget-update
-         budget
-         (lambda (state now)
-           (declare (ignore now))
-           (let* ((used (getf state :used))
-                  (limit (retry-budget-limit budget)))
-             (if (< used limit)
-                 (values (list :window-start (getf state :window-start)
-                               :used (1+ used))
-                         t)
-                 (values nil nil))))))))
-  (with-lock-held ((%retry-budget-lock budget))
-    (%retry-budget-refresh!
-     budget
-     (%monotonic-seconds
-      (%retry-budget-clock budget)
-      (%retry-budget-monotonic-units-per-second budget)))
-    (if (< (%retry-budget-used budget) (retry-budget-limit budget))
-        (progn
-          (incf (%retry-budget-used budget))
-          t)
-        nil)))
+  (%retry-budget-acquire budget))

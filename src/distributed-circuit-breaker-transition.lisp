@@ -6,14 +6,20 @@
   (%distributed-circuit-breaker-with-lease
    breaker
    (lambda ()
-     (let ((store (distributed-circuit-breaker-store breaker))
-           (key (distributed-circuit-breaker-key breaker)))
+     (let ((store (%distributed-circuit-breaker-store breaker))
+           (key (%distributed-circuit-breaker-key breaker))
+           (reset-timeout
+             (%distributed-circuit-breaker-reset-timeout breaker))
+           (half-open-probe-limit
+             (%distributed-circuit-breaker-half-open-probe-limit breaker)))
        (loop repeat 64 do
          (multiple-value-bind (state version)
-             (%distributed-circuit-breaker-read breaker)
+           (%distributed-circuit-breaker-read breaker)
            (let* ((now (%distributed-circuit-breaker-now breaker))
-                  (current-state (getf state :state))
-                  (generation (getf state :generation)))
+                  (current-state
+                    (%distributed-circuit-breaker-state-state state))
+                  (generation
+                    (%distributed-circuit-breaker-state-generation state)))
              (case current-state
                (:closed
                 (return-from %distributed-circuit-breaker-begin
@@ -22,25 +28,27 @@
                           generation
                           nil)))
                (:open
-                (let* ((opened-at (getf state :opened-at))
+                (let* ((opened-at
+                         (%distributed-circuit-breaker-state-opened-at state))
                        (retry-at (and opened-at
-                                      (+ opened-at
-                                         (distributed-circuit-breaker-reset-timeout
-                                          breaker)))))
+                                      (+ opened-at reset-timeout))))
                   (if (and retry-at (>= now retry-at))
-                      (let ((next (copy-list state)))
-                        (setf (getf next :state) :half-open
-                              (getf next :active-probes) 1
-                              (getf next :half-open-successes) 0
-                              (getf next :failure-count) 0
-                              (getf next :generation) (1+ generation))
+                      (let ((next
+                              (%make-distributed-circuit-breaker-state
+                               :state :half-open
+                               :failure-count 0
+                               :opened-at opened-at
+                               :active-probes 1
+                               :half-open-successes 0
+                               :generation (1+ generation))))
                         (handler-case
                             (progn
                               (state-store-put-if-version store key next version)
                               (return-from %distributed-circuit-breaker-begin
                                 (values t
                                         :half-open
-                                        (getf next :generation)
+                                        (%distributed-circuit-breaker-state-generation
+                                         next)
                                         nil)))
                           (resilience-store-conflict () nil)))
                       (return-from %distributed-circuit-breaker-begin
@@ -48,12 +56,25 @@
                                 (%distributed-circuit-breaker-open-condition
                                  :open retry-at generation operation))))))
                (:half-open
-                (if (< (getf state :active-probes)
-                       (distributed-circuit-breaker-half-open-probe-limit
-                        breaker))
-                    (let ((next (copy-list state)))
-                      (incf (getf next :active-probes))
-                      (handler-case
+                (let ((active-probes
+                        (%distributed-circuit-breaker-state-active-probes state))
+                      (failure-count
+                        (%distributed-circuit-breaker-state-failure-count state))
+                      (opened-at
+                        (%distributed-circuit-breaker-state-opened-at state))
+                      (half-open-successes
+                        (%distributed-circuit-breaker-state-half-open-successes
+                         state)))
+                  (if (< active-probes half-open-probe-limit)
+                      (let ((next
+                              (%make-distributed-circuit-breaker-state
+                               :state :half-open
+                               :failure-count failure-count
+                               :opened-at opened-at
+                               :active-probes (1+ active-probes)
+                               :half-open-successes half-open-successes
+                               :generation generation)))
+                        (handler-case
                           (progn
                             (state-store-put-if-version store key next version)
                             (return-from %distributed-circuit-breaker-begin
@@ -61,11 +82,11 @@
                                       :half-open
                                       generation
                                       nil)))
-                        (resilience-store-conflict () nil)))
-                    (return-from %distributed-circuit-breaker-begin
-                      (values nil nil nil
-                              (%distributed-circuit-breaker-open-condition
-                               :half-open nil generation operation)))))
+                          (resilience-store-conflict () nil)))
+                      (return-from %distributed-circuit-breaker-begin
+                        (values nil nil nil
+                                (%distributed-circuit-breaker-open-condition
+                                 :half-open nil generation operation))))))
                (otherwise
                 (%distributed-circuit-breaker-store-error
                  breaker "The distributed circuit-breaker state is invalid.")))))))
@@ -77,62 +98,93 @@
   (%distributed-circuit-breaker-with-lease
    breaker
    (lambda ()
-     (let ((store (distributed-circuit-breaker-store breaker))
-           (key (distributed-circuit-breaker-key breaker)))
+     (let ((store (%distributed-circuit-breaker-store breaker))
+           (key (%distributed-circuit-breaker-key breaker))
+           (failure-threshold
+             (%distributed-circuit-breaker-failure-threshold breaker))
+           (success-threshold
+             (%distributed-circuit-breaker-success-threshold breaker)))
        (loop repeat 64 do
          (multiple-value-bind (state version)
-             (%distributed-circuit-breaker-read breaker)
-           (when (/= token-generation (getf state :generation))
-             (return-from %distributed-circuit-breaker-finish nil))
-           (when (not (eq token-state (getf state :state)))
-             (return-from %distributed-circuit-breaker-finish nil))
-           (let ((next (copy-list state)))
-             (case token-state
-               (:closed
-                (if failed-p
-                    (let ((failure-count (1+ (getf state :failure-count))))
-                      (if (>= failure-count
-                              (distributed-circuit-breaker-failure-threshold
-                               breaker))
-                          (setf (getf next :state) :open
-                                (getf next :opened-at)
-                                (%distributed-circuit-breaker-now breaker)
-                                (getf next :failure-count) 0
-                                (getf next :active-probes) 0
-                                (getf next :half-open-successes) 0
-                                (getf next :generation)
-                                (1+ token-generation))
-                          (setf (getf next :failure-count) failure-count)))
-                    (setf (getf next :failure-count) 0)))
-               (:half-open
-                (setf (getf next :active-probes)
-                      (max 0 (1- (getf state :active-probes))))
-                (if failed-p
-                    (setf (getf next :state) :open
-                          (getf next :opened-at)
-                          (%distributed-circuit-breaker-now breaker)
-                          (getf next :failure-count) 0
-                          (getf next :active-probes) 0
-                          (getf next :half-open-successes) 0
-                          (getf next :generation) (1+ token-generation))
-                    (let ((successes (1+ (getf state :half-open-successes))))
-                      (if (>= successes
-                              (distributed-circuit-breaker-success-threshold
-                               breaker))
-                          (setf (getf next :state) :closed
-                                (getf next :opened-at) nil
-                                (getf next :failure-count) 0
-                                (getf next :active-probes) 0
-                                (getf next :half-open-successes) 0
-                                (getf next :generation) (1+ token-generation))
-                          (setf (getf next :half-open-successes) successes)))))
-               (otherwise
-                (%distributed-circuit-breaker-store-error
-                 breaker "The distributed circuit-breaker token is invalid.")))
-             (handler-case
-                 (return-from %distributed-circuit-breaker-finish
-                   (state-store-put-if-version store key next version))
-               (resilience-store-conflict () nil)))))
+           (%distributed-circuit-breaker-read breaker)
+           (let ((now (%distributed-circuit-breaker-now breaker))
+                 (generation
+                   (%distributed-circuit-breaker-state-generation state))
+                 (current-state
+                   (%distributed-circuit-breaker-state-state state))
+                 (failure-count
+                   (%distributed-circuit-breaker-state-failure-count state))
+                 (opened-at
+                   (%distributed-circuit-breaker-state-opened-at state))
+                 (active-probes
+                   (%distributed-circuit-breaker-state-active-probes state))
+                 (half-open-successes
+                   (%distributed-circuit-breaker-state-half-open-successes
+                    state)))
+             (when (/= token-generation generation)
+               (return-from %distributed-circuit-breaker-finish nil))
+             (when (not (eq token-state current-state))
+               (return-from %distributed-circuit-breaker-finish nil))
+             (let ((next
+                     (case token-state
+                       (:closed
+                        (if failed-p
+                            (let ((next-failure-count (1+ failure-count)))
+                              (if (>= next-failure-count failure-threshold)
+                                  (%make-distributed-circuit-breaker-state
+                                   :state :open
+                                   :failure-count 0
+                                   :opened-at now
+                                   :active-probes 0
+                                   :half-open-successes 0
+                                   :generation (1+ token-generation))
+                                  (%make-distributed-circuit-breaker-state
+                                   :state :closed
+                                   :failure-count next-failure-count
+                                   :opened-at opened-at
+                                   :active-probes active-probes
+                                   :half-open-successes half-open-successes
+                                   :generation generation)))
+                            (%make-distributed-circuit-breaker-state
+                             :state :closed
+                             :failure-count 0
+                             :opened-at opened-at
+                             :active-probes active-probes
+                             :half-open-successes half-open-successes
+                             :generation generation)))
+                       (:half-open
+                        (let ((next-active-probes (max 0 (1- active-probes))))
+                          (if failed-p
+                              (%make-distributed-circuit-breaker-state
+                               :state :open
+                               :failure-count 0
+                               :opened-at now
+                               :active-probes 0
+                               :half-open-successes 0
+                               :generation (1+ token-generation))
+                              (let ((successes (1+ half-open-successes)))
+                                (if (>= successes success-threshold)
+                                    (%make-distributed-circuit-breaker-state
+                                     :state :closed
+                                     :failure-count 0
+                                     :opened-at nil
+                                     :active-probes 0
+                                     :half-open-successes 0
+                                     :generation (1+ token-generation))
+                                    (%make-distributed-circuit-breaker-state
+                                     :state :half-open
+                                     :failure-count failure-count
+                                     :opened-at opened-at
+                                     :active-probes next-active-probes
+                                     :half-open-successes successes
+                                     :generation generation))))))
+                       (otherwise
+                        (%distributed-circuit-breaker-store-error
+                         breaker "The distributed circuit-breaker token is invalid.")))))
+               (handler-case
+                   (return-from %distributed-circuit-breaker-finish
+                     (state-store-put-if-version store key next version))
+                 (resilience-store-conflict () nil))))))
        (%distributed-circuit-breaker-store-error
         breaker "Could not record the distributed circuit-breaker result.")))))
 
