@@ -140,6 +140,13 @@ The composition helper propagates the selected operation, context, time, and
 event boundaries to the nested controls. Read [Core concepts](../guide/core-concepts.md)
 before changing the order of controls for a production operation.
 
+For literal option lists, the compiler can select a direct execution path
+without constructing a composition plan when the selected controls permit it.
+Metrics-only calls keep metrics active without enabling the event-handler
+runtime boundary. Options that require lifecycle, context, observation,
+idempotency, or worker coordination retain their corresponding runtime
+semantics; dynamic or unsupported option lists use normal runtime validation.
+
 ## Optional integrations
 
 | Entry point | Purpose |

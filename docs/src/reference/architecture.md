@@ -23,6 +23,27 @@ the runtime function remains responsible for executing the control chain. The
 continuation boundary is deliberately explicit: successful multiple values go
 to the success callback, while operation errors go to the error callback.
 
+## Composition dispatch
+
+Composition calls use the smallest execution path that preserves their
+configured boundaries. Literal option lists recognized by the compiler macro
+can use a direct core path, a metrics-only path, or a runtime-context path;
+calls that need a plan object use the plan path. Distributed breakers,
+executors, hedging, request coalescing, and fingerprint-based idempotency are
+examples of features that require the plan path.
+
+Metrics-only execution records metrics without activating the runtime event
+boundary. A context, observer, lifecycle, event handler, or idempotency key
+activates the corresponding runtime boundary when a plan is not required.
+Unknown or dynamically shaped option lists continue through ordinary runtime
+validation, so dispatch is an implementation detail rather than a separate
+API contract.
+
+The retry boundary also has a single-pass path for a non-retry-safe policy with
+one allowed attempt when no breaker, bulkhead, limiter, retry budget, event
+handler, or fallback requires the retry runtime. Deadline and cancellation
+checks remain cooperative on that path.
+
 ## Important invariants
 
 ### Monotonic time
