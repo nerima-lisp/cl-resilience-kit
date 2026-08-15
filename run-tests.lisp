@@ -8,4 +8,8 @@
 
 (let ((root (uiop:pathname-directory-pathname *load-truename*)))
   (bootstrap-cl-resilience-kit root)
-  (asdf:test-system "cl-resilience-kit/test"))
+  ;; Target the full suite directly rather than "cl-resilience-kit" (whose
+  ;; :in-order-to redirects test-op here): a direct target still fails loudly
+  ;; via ASDF dependency resolution if a subsystem is missing, without
+  ;; depending on that redirect continuing to exist on the main system.
+  (asdf:test-system "cl-resilience-kit/all-test"))

@@ -90,8 +90,12 @@ tests pass."
          (progn
            ;; Load the test system in one top-level operation so ASDF cannot
            ;; silently compile the same component again after instrumentation
-           ;; has been disabled.
-           (asdf:test-system "cl-resilience-kit/test" :force t)
+           ;; has been disabled. Target the full suite directly (see
+           ;; run-tests.lisp for why this targets all-test instead of relying
+           ;; on the "cl-resilience-kit" test-op redirect) so the optional
+           ;; observability and dataflow integration tests are instrumented
+           ;; and covered too.
+           (asdf:test-system "cl-resilience-kit/all-test" :force t)
            (proclaim '(optimize (sb-cover:store-coverage-data 0)))
            (discard-ineligible-coverage-records root)
            (sb-cover:report (merge-pathnames "html/" output)

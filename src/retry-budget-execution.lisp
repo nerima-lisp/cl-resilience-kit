@@ -1,3 +1,5 @@
+(in-package #:resilience-kit)
+
 (defun %retry-budget-now (budget)
   (%monotonic-seconds
    (%retry-budget-clock budget)
@@ -25,18 +27,19 @@
       ((null value)))
     (if (and (%finite-real-p window-start)
              (integerp used)
-             (>= used 0))
-        (if (>= (- now window-start) (%retry-budget-window budget))
-            (%make-distributed-retry-budget-state now 0)
-            (%make-distributed-retry-budget-state
-             (float window-start 1d0)
-             used))
+             (>= used 0)
+             (<= used (%retry-budget-limit budget)))
+        (let ((effective-window-start (min (float window-start 1d0) now)))
+          (if (>= (- now effective-window-start) (%retry-budget-window budget))
+              (%make-distributed-retry-budget-state now 0)
+              (%make-distributed-retry-budget-state effective-window-start used)))
         (if (null value)
             (%make-distributed-retry-budget-state now 0)
             (error 'resilience-store-error
                    :key (%distributed-retry-budget-key budget)
                    :message "The distributed retry budget record is malformed.
-Expected numeric window-start and non-negative integer used values.")))))
+Expected a numeric window-start and a non-negative integer used value
+that does not exceed the budget limit.")))))
 
 (defun %distributed-retry-budget-read (budget)
   (let ((store (%distributed-retry-budget-store budget))

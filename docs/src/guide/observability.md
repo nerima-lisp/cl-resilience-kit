@@ -9,9 +9,11 @@ to publish resilience events as metrics:
 (in-package #:resilience-observability)
 ```
 
-Load the ASDF system by its `cl-...` name, then use the shorter Nerima Lisp
-package nicknames in code: `resilience-kit` for the core API and
-`resilience-observability` for the integration layer.
+Load the ASDF system by its `cl-...` name, then use the Nerima Lisp package
+names in code: `resilience-kit` for the core API and
+`resilience-observability` for the integration layer. `cl-resilience-kit`
+and `cl-resilience-kit/observability` remain available as compatibility
+nicknames.
 
 Create one observability object for the event stream you want to measure. The
 integration defines an event counter and a duration histogram in the supplied

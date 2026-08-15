@@ -31,21 +31,27 @@
                                          :operation operation
                                          :stage :before-attempt
                                          :attempt attempt)))
-        ;; Run post-call checks only after a normal return. A cleanup check that
-        ;; signals here would otherwise mask the condition raised by THUNK.
-        (multiple-value-prog1
-            (funcall thunk)
-          (let ((finished-at (%monotonic-seconds clock units)))
-            (when (and effective-deadline
-                       (>= finished-at effective-deadline))
-              (if attempt-timeout-p
-                  (error (%make-attempt-timeout clock units effective-deadline
-                                                per-attempt-timeout operation attempt
-                                                :attempt))
-                  (%signal-deadline-exceeded clock units effective-deadline
-                                             :operation operation
-                                             :stage :attempt
-                                             :attempt attempt))))))))
+        ;; THUNK observes the attempt-scoped deadline (the earlier of the
+        ;; overall and per-attempt deadlines) through *RESILIENCE-DEADLINE*,
+        ;; not whatever wider deadline the caller bound around the whole
+        ;; retry call.
+        (let ((*resilience-deadline* effective-deadline))
+          ;; Run post-call checks only after a normal return. A cleanup check
+          ;; that signals here would otherwise mask the condition raised by
+          ;; THUNK.
+          (multiple-value-prog1
+              (funcall thunk)
+            (let ((finished-at (%monotonic-seconds clock units)))
+              (when (and effective-deadline
+                         (>= finished-at effective-deadline))
+                (if attempt-timeout-p
+                    (error (%make-attempt-timeout clock units effective-deadline
+                                                  per-attempt-timeout operation attempt
+                                                  :attempt))
+                    (%signal-deadline-exceeded clock units effective-deadline
+                                               :operation operation
+                                               :stage :attempt
+                                               :attempt attempt)))))))))
 
 (defun %make-attempt-timeout
     (clock units deadline timeout operation attempt stage)

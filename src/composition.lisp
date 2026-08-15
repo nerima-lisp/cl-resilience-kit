@@ -215,11 +215,39 @@
                 (list '%on-error on-error))
           (list 'check-type '%on-success 'function)
           (list 'check-type '%on-error 'function)
-          (list 'handler-case
-                (list 'multiple-value-call '%on-success direct-form)
-                (list 'error
-                      (list 'condition)
-                      (list 'funcall '%on-error 'condition)))))
+          (list 'let
+                (list (list '%on-success-values nil)
+                      (list '%on-success-condition nil)
+                      (list '%on-success-failed-p nil))
+                (list 'handler-case
+                      (list 'setf '%on-success-values
+                            (list '%pack-resilience-values direct-form))
+                      (list 'error
+                            (list 'condition)
+                            (list 'setf '%on-success-condition 'condition
+                                  '%on-success-failed-p t)))
+                (list 'if '%on-success-failed-p
+                      (list 'funcall '%on-error '%on-success-condition)
+                      (list 'multiple-value-call '%on-success
+                            (list '%unpack-resilience-values '%on-success-values))))))
+  (defun %resilience-direct-call-form-with-inherited-guard (name thunk options mode)
+    "Guard NAME's direct call so a non-nil *RESILIENCE-EVENT-HANDLER* inherited
+at runtime falls back to the general dispatch path instead of being silently
+dropped by the macroexpansion-time fast path."
+    (list 'if '*resilience-event-handler*
+          (list '%call-with-resilience-from-options thunk (cons 'list options))
+          (%resilience-direct-call-form name thunk options mode)))
+  (defun %resilience-k-direct-form-with-inherited-guard
+      (on-success on-error name thunk options mode)
+    "Continuation-passing counterpart of
+%RESILIENCE-DIRECT-CALL-FORM-WITH-INHERITED-GUARD."
+    (list 'if '*resilience-event-handler*
+          (list '%call-with-resilience/k-from-options
+                thunk on-success on-error (cons 'list options))
+          (%resilience-k-direct-form
+           on-success
+           on-error
+           (%resilience-direct-call-form name thunk options mode))))
 
 (defun %call-with-resilience-dispatch-mode
     (distributed-circuit-breaker operation event-handler context metrics observer
@@ -455,14 +483,14 @@
     (thunk on-success on-error options)
   (multiple-value-call
       (lambda (retry-policy circuit-breaker distributed-circuit-breaker
-               bulkhead bulkhead-timeout rate-limiter rate-limit-tokens
-               rate-limit-wait-p rate-limit-max-wait
-               rate-limit-signal-on-reject-p overall-timeout overall-deadline
-               per-attempt-timeout clock monotonic-units-per-second sleeper
-               operation retry-budget cancellation-token event-handler fallback
-               context metrics observer lifecycle executor executor-timeout
-               hard-timeout hedge-after max-hedge-attempts hedge-safe-p
-               request-coalescer idempotency-key idempotency-fingerprint)
+                            bulkhead bulkhead-timeout rate-limiter rate-limit-tokens
+                            rate-limit-wait-p rate-limit-max-wait
+                            rate-limit-signal-on-reject-p overall-timeout overall-deadline
+                            per-attempt-timeout clock monotonic-units-per-second sleeper
+                            operation retry-budget cancellation-token event-handler fallback
+                            context metrics observer lifecycle executor executor-timeout
+                            hard-timeout hedge-after max-hedge-attempts hedge-safe-p
+                            request-coalescer idempotency-key idempotency-fingerprint)
         (case (%call-with-resilience-dispatch-mode
                distributed-circuit-breaker operation event-handler context
                metrics observer lifecycle executor executor-timeout hard-timeout
@@ -470,29 +498,45 @@
                idempotency-key idempotency-fingerprint)
           (:metrics-direct
            (check-type metrics resilience-metrics)
-           (handler-case
-               (multiple-value-call on-success
-                 (%run-resilience-metrics-direct
-                  thunk retry-policy circuit-breaker bulkhead bulkhead-timeout
-                  rate-limiter rate-limit-tokens rate-limit-wait-p
-                  rate-limit-max-wait rate-limit-signal-on-reject-p
-                  overall-timeout overall-deadline per-attempt-timeout clock
-                  monotonic-units-per-second sleeper operation retry-budget
-                  cancellation-token fallback metrics))
-             (error (condition)
-               (funcall on-error condition))))
+           (let ((%values nil)
+                 (%condition nil)
+                 (%failed-p nil))
+             (handler-case
+                 (setf %values
+                       (%pack-resilience-values
+                        (%run-resilience-metrics-direct
+                         thunk retry-policy circuit-breaker bulkhead bulkhead-timeout
+                         rate-limiter rate-limit-tokens rate-limit-wait-p
+                         rate-limit-max-wait rate-limit-signal-on-reject-p
+                         overall-timeout overall-deadline per-attempt-timeout clock
+                         monotonic-units-per-second sleeper operation retry-budget
+                         cancellation-token fallback metrics)))
+               (error (condition)
+                      (setf %condition condition
+                            %failed-p t)))
+             (if %failed-p
+                 (funcall on-error %condition)
+                 (multiple-value-call on-success (%unpack-resilience-values %values)))))
           (:core-direct
-           (handler-case
-               (multiple-value-call on-success
-                 (%call-with-resilience-core-direct
-                  thunk retry-policy circuit-breaker bulkhead bulkhead-timeout
-                  rate-limiter rate-limit-tokens rate-limit-wait-p
-                  rate-limit-max-wait rate-limit-signal-on-reject-p
-                  overall-timeout overall-deadline per-attempt-timeout clock
-                  monotonic-units-per-second sleeper operation retry-budget
-                  cancellation-token event-handler fallback))
-             (error (condition)
-               (funcall on-error condition))))
+           (let ((%values nil)
+                 (%condition nil)
+                 (%failed-p nil))
+             (handler-case
+                 (setf %values
+                       (%pack-resilience-values
+                        (%call-with-resilience-core-direct
+                         thunk retry-policy circuit-breaker bulkhead bulkhead-timeout
+                         rate-limiter rate-limit-tokens rate-limit-wait-p
+                         rate-limit-max-wait rate-limit-signal-on-reject-p
+                         overall-timeout overall-deadline per-attempt-timeout clock
+                         monotonic-units-per-second sleeper operation retry-budget
+                         cancellation-token event-handler fallback)))
+               (error (condition)
+                      (setf %condition condition
+                            %failed-p t)))
+             (if %failed-p
+                 (funcall on-error %condition)
+                 (multiple-value-call on-success (%unpack-resilience-values %values)))))
           (:runtime-direct
            (%run-resilience-runtime-direct/k
             on-success on-error thunk retry-policy circuit-breaker bulkhead
@@ -600,7 +644,7 @@ OPTIONS is a keyword property list; its values are validated before dispatch."
 (define-compiler-macro call-with-resilience (&whole form thunk &rest options)
   (cond
     ((null options)
-     (%resilience-direct-call-form
+     (%resilience-direct-call-form-with-inherited-guard
       '%call-with-resilience-core-direct
       thunk
       nil
@@ -611,17 +655,29 @@ OPTIONS is a keyword property list; its values are validated before dispatch."
            always (keywordp key))
      (cond
        ((%call-with-resilience-core-direct-options-p options)
-        (%resilience-direct-call-form
-         '%call-with-resilience-core-direct
-         thunk
-         options
-         :core))
+        (if (%call-with-resilience-runtime-direct-options-p options)
+            (%resilience-direct-call-form
+             '%run-resilience-runtime-direct
+             thunk
+             options
+             :runtime)
+            (%resilience-direct-call-form-with-inherited-guard
+             '%call-with-resilience-core-direct
+             thunk
+             options
+             :core)))
        ((%call-with-resilience-metrics-direct-options-p options)
-        (%resilience-direct-call-form
-         '%run-resilience-metrics-direct
-         thunk
-         options
-         :metrics))
+        (if (%call-with-resilience-runtime-direct-options-p options)
+            (%resilience-direct-call-form
+             '%run-resilience-metrics-direct
+             thunk
+             options
+             :metrics)
+            (%resilience-direct-call-form-with-inherited-guard
+             '%run-resilience-metrics-direct
+             thunk
+             options
+             :metrics)))
        ((%call-with-resilience-runtime-direct-options-p options)
         (%resilience-direct-call-form
          '%run-resilience-runtime-direct
@@ -637,37 +693,52 @@ OPTIONS is a keyword property list; its values are validated before dispatch."
     (&whole form thunk on-success on-error &rest options)
   (cond
     ((null options)
-     (%resilience-k-direct-form
+     (%resilience-k-direct-form-with-inherited-guard
       on-success
       on-error
-      (%resilience-direct-call-form
-       '%call-with-resilience-core-direct
-       thunk
-       nil
-       :core)))
+      '%call-with-resilience-core-direct
+      thunk
+      nil
+      :core))
     ((not (evenp (length options)))
      form)
     ((loop for key in options by #'cddr
            always (keywordp key))
      (cond
        ((%call-with-resilience-core-direct-options-p options)
-        (%resilience-k-direct-form
-         on-success
-         on-error
-         (%resilience-direct-call-form
-          '%call-with-resilience-core-direct
-          thunk
-          options
-          :core)))
+        (if (%call-with-resilience-runtime-direct-options-p options)
+            (%resilience-k-direct-form
+             on-success
+             on-error
+             (%resilience-direct-call-form
+              '%run-resilience-runtime-direct
+              thunk
+              options
+              :runtime))
+            (%resilience-k-direct-form-with-inherited-guard
+             on-success
+             on-error
+             '%call-with-resilience-core-direct
+             thunk
+             options
+             :core)))
        ((%call-with-resilience-metrics-direct-options-p options)
-        (%resilience-k-direct-form
-         on-success
-         on-error
-         (%resilience-direct-call-form
-          '%run-resilience-metrics-direct
-          thunk
-          options
-          :metrics)))
+        (if (%call-with-resilience-runtime-direct-options-p options)
+            (%resilience-k-direct-form
+             on-success
+             on-error
+             (%resilience-direct-call-form
+              '%run-resilience-metrics-direct
+              thunk
+              options
+              :metrics))
+            (%resilience-k-direct-form-with-inherited-guard
+             on-success
+             on-error
+             '%run-resilience-metrics-direct
+             thunk
+             options
+             :metrics)))
        ((%call-with-resilience-runtime-direct-options-p options)
         (%resilience-k-direct-form
          on-success

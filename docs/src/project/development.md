@@ -41,13 +41,16 @@ When working outside the development shell, the repository also documents the
 direct test commands:
 
 ```sh
-sbcl --non-interactive --no-userinit --no-sysinit \
+sbcl --dynamic-space-size 8192 --non-interactive --no-userinit --no-sysinit \
   --load run-tests.lisp
 ```
 
-The bootstrap script accepts either adjacent nerima-lisp checkouts or the
-shared ghq bare-clone layout and materializes missing sibling sources
-automatically for the direct run.
+The larger dynamic space works around an SBCL garbage-collector stall
+observed during ASDF's source-registry scan on some platforms; it is not a
+fix in this repository, and the direct run has not been confirmed to
+complete under it. The bootstrap script accepts either adjacent nerima-lisp
+checkouts or the shared ghq bare-clone layout and materializes missing
+sibling sources automatically for the direct run.
 
 For a coverage report, provide an output directory or let the script use its
 default:

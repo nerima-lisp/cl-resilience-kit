@@ -93,16 +93,6 @@
      packed)))
 
 
-(defun %finite-real-p (value)
-  "Return true when VALUE is a finite real representable as a double float."
-  (and (realp value)
-       (= value value)
-       (handler-case
-           (let ((double (float value 1d0)))
-             (and (= double double)
-                  (<= (abs double) most-positive-double-float)))
-         (error () nil))))
-
 (defun %ensure-non-negative-real (value name)
   (unless (and (%finite-real-p value) (not (minusp value)))
     (error "~A must be a non-negative real, got ~S." name value))

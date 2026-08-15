@@ -26,8 +26,9 @@
         (active-handler (%active-event-handler event-handler))
         (lock (%bulkhead-lock bulkhead))
         (limit (%bulkhead-limit bulkhead))
-        (clock *resilience-clock*)
-        (units *resilience-monotonic-units-per-second*)
+        (clock (%active-clock *resilience-clock*))
+        (units (%active-monotonic-units-per-second
+                *resilience-monotonic-units-per-second*))
         (admitted-p nil)
         (observed-in-flight 0))
     (when active-token
@@ -86,8 +87,9 @@ worker threads and does not cancel a call that has already been admitted."
          (condition-variable (%queued-bulkhead-condition-variable bulkhead))
          (limit (%bulkhead-limit bulkhead))
          (max-queue (%queued-bulkhead-max-queue bulkhead))
-         (clock *resilience-clock*)
-         (units *resilience-monotonic-units-per-second*)
+         (clock (%active-clock *resilience-clock*))
+         (units (%active-monotonic-units-per-second
+                 *resilience-monotonic-units-per-second*))
          (started-at (and timeout
                           (%monotonic-seconds clock units)))
          (admission-deadline (and timeout (+ started-at (float timeout 1d0))))

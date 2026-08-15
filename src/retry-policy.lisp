@@ -149,18 +149,25 @@ MAX-ATTEMPTS includes the initial call. A classifier is called with
 `(value attempt)` and may return a boolean, a non-negative numeric delay hint,
 or a RETRY-DECISION. No classifier is consulted unless RETRY-SAFE-P is true;
 callers must opt in explicitly for operations whose effects may be repeated."
-  (apply #'make-instance
-         'retry-policy
-         (%retry-policy-initargs
-          :max-attempts max-attempts
-          :initial-delay initial-delay
-          :multiplier multiplier
-          :max-delay max-delay
-          :jitter jitter
-          :condition-classifier condition-classifier
-          :result-classifier result-classifier
-          :retry-safe-p retry-safe-p
-          :random-source random-source)))
+  (let ((args (%retry-policy-initargs
+               :max-attempts max-attempts
+               :initial-delay initial-delay
+               :multiplier multiplier
+               :max-delay max-delay
+               :jitter jitter
+               :condition-classifier condition-classifier
+               :result-classifier result-classifier
+               :retry-safe-p retry-safe-p
+               :random-source random-source)))
+    (%make-retry-policy (getf args :max-attempts)
+                        (getf args :initial-delay)
+                        (getf args :multiplier)
+                        (getf args :max-delay)
+                        (getf args :jitter)
+                        (getf args :retry-safe-p)
+                        (getf args :condition-classifier)
+                        (getf args :result-classifier)
+                        (getf args :random-source))))
 
 (defun %classifier-decision (classifier value attempt)
   (handler-case

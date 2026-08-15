@@ -109,6 +109,26 @@ readers (`resilience-event-type`, `resilience-event-operation`,
 `resilience-event-metadata`, and `resilience-event-duration`) for structured
 data.
 
+The warning signaled for an isolated handler error is `resilience-observer-warning`,
+a `warning` (not a `resilience-error`), so an unhandled instance prints and
+execution continues rather than transferring control. It carries the failing
+phase (`resilience-observer-warning-phase`, either `:event-handler` for the
+single event-handler callback or `:observer` for a `resilience-observer`
+handler function), the failing callback (`resilience-observer-warning-handler`),
+the `resilience-event` being delivered (`resilience-observer-warning-event`),
+and the condition the callback signaled (`resilience-observer-warning-cause`).
+Handling it is optional; observe or muffle it with `handler-bind`:
+
+```lisp
+(handler-bind ((resilience-observer-warning
+                 (lambda (w)
+                   (format *error-output* "observer failed: ~A~%"
+                           (resilience-observer-warning-cause w))
+                   (muffle-warning w))))
+  (with-resilience (:operation :checkout :event-handler #'record-event)
+    (checkout)))
+```
+
 ## Composition
 
 ```lisp

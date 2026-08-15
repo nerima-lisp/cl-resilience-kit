@@ -55,14 +55,6 @@
                         half-open-successes generation)
       (cond
         ((and (%proper-list-p value)
-              (keywordp (car value)))
-         (values (getf value :state)
-                 (getf value :failure-count)
-                 (getf value :opened-at)
-                 (getf value :active-probes)
-                 (getf value :half-open-successes)
-                 (getf value :generation)))
-        ((and (%proper-list-p value)
               (eql (list-length value) 6))
          (values (%distributed-circuit-breaker-state-state value)
                  (%distributed-circuit-breaker-state-failure-count value)
@@ -70,6 +62,14 @@
                  (%distributed-circuit-breaker-state-active-probes value)
                  (%distributed-circuit-breaker-state-half-open-successes value)
                  (%distributed-circuit-breaker-state-generation value)))
+        ((and (%proper-list-p value)
+              (keywordp (car value)))
+         (values (getf value :state)
+                 (getf value :failure-count)
+                 (getf value :opened-at)
+                 (getf value :active-probes)
+                 (getf value :half-open-successes)
+                 (getf value :generation)))
         (t
          (%distributed-circuit-breaker-store-error
           breaker

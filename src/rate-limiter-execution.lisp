@@ -43,8 +43,8 @@
 
 (defun rate-limiter-acquire
     (limiter &key (tokens 1d0) wait-p max-wait
-                    (signal-on-reject-p nil) operation
-                    cancellation-token event-handler)
+             (signal-on-reject-p nil) operation
+             cancellation-token event-handler)
   "Acquire TOKENS from LIMITER.
 
 With WAIT-P NIL, return `(VALUES NIL RETRY-AFTER)` when the bucket cannot
@@ -84,12 +84,12 @@ must advance the injected clock if a test wants to observe successful waiting."
          :stage :rate-limit))
       (when (> requested capacity)
         (return-from rate-limiter-acquire
-          (%reject-rate-limiter-acquire
-           requested
-           (with-lock-held (lock)
-             (%rate-limiter-tokens limiter))
-           nil operation :request-exceeds-capacity signal-on-reject-p
-           active-handler clock units)))
+                     (%reject-rate-limiter-acquire
+                      requested
+                      (with-lock-held (lock)
+                                      (%rate-limiter-tokens limiter))
+                      nil operation :request-exceeds-capacity signal-on-reject-p
+                      active-handler clock units)))
       (when (and (not wait-p) (null active-token))
         (multiple-value-bind (acquired-p retry-after available observed-at)
             (%rate-limiter-try-acquire*
@@ -97,77 +97,77 @@ must advance the injected clock if a test wants to observe successful waiting."
           (when acquired-p
             (%emit-resilience-event*
              active-handler :rate-limit-acquired
-             operation nil nil t nil nil
+             operation nil nil nil t nil nil
              observed-at nil nil nil
              clock units)
             (return-from rate-limiter-acquire (values t 0d0)))
           (return-from rate-limiter-acquire
-            (%reject-rate-limiter-acquire
-             requested available retry-after operation :insufficient-tokens
-             signal-on-reject-p active-handler clock units observed-at))))
+                       (%reject-rate-limiter-acquire
+                        requested available retry-after operation :insufficient-tokens
+                        signal-on-reject-p active-handler clock units observed-at))))
       (let ((wait-start nil))
         (loop
-          (when active-token
-            (%check-cancellation-token active-token))
-          (multiple-value-bind (acquired-p retry-after available observed-at)
-              (%rate-limiter-try-acquire*
-               limiter requested lock clock units capacity refill-rate)
-            (when acquired-p
-              (%emit-resilience-event*
-               active-handler :rate-limit-acquired
-               operation nil nil t nil nil
-               observed-at nil nil nil
-               clock units)
-              (return (values t 0d0)))
-            (unless wait-p
-              (return
+         (when active-token
+           (%check-cancellation-token active-token))
+         (multiple-value-bind (acquired-p retry-after available observed-at)
+             (%rate-limiter-try-acquire*
+              limiter requested lock clock units capacity refill-rate)
+           (when acquired-p
+             (%emit-resilience-event*
+              active-handler :rate-limit-acquired
+              operation nil nil nil t nil nil
+              observed-at nil nil nil
+              clock units)
+             (return (values t 0d0)))
+           (unless wait-p
+             (return
+              (%reject-rate-limiter-acquire
+               requested available retry-after operation :insufficient-tokens
+               signal-on-reject-p active-handler clock units observed-at)))
+           (let* ((now observed-at)
+                  (start (or wait-start (setf wait-start now)))
+                  (elapsed (- now start))
+                  (deadline-left
+                   (and active-deadline
+                        (%deadline-remaining-at
+                         (if (and (eq resilience-clock clock)
+                                  (eql resilience-units units))
+                             now
+                             (%monotonic-seconds
+                              resilience-clock resilience-units))
+                         active-deadline))))
+             (when (and deadline-left
+                        (or (null retry-after)
+                            (>= retry-after deadline-left)))
+               (%signal-deadline-exceeded
+                resilience-clock
+                resilience-units
+                active-deadline
+                :operation operation
+                :stage :rate-limit))
+             (when (or (null retry-after)
+                       (and max-wait (>= elapsed max-wait))
+                       (and max-wait (> retry-after (- max-wait elapsed))))
+               (return
                 (%reject-rate-limiter-acquire
-                 requested available retry-after operation :insufficient-tokens
+                 requested available retry-after operation :wait-limit
                  signal-on-reject-p active-handler clock units observed-at)))
-            (let* ((now observed-at)
-                   (start (or wait-start (setf wait-start now)))
-                   (elapsed (- now start))
-                   (deadline-left
-                     (and active-deadline
-                          (%deadline-remaining-at
-                           (if (and (eq resilience-clock clock)
-                                    (eql resilience-units units))
-                               now
-                               (%monotonic-seconds
-                                resilience-clock resilience-units))
-                           active-deadline)))
-              (when (and deadline-left
-                         (or (null retry-after)
-                             (>= retry-after deadline-left)))
-                (%signal-deadline-exceeded
-                 resilience-clock
-                 resilience-units
-                 active-deadline
-                 :operation operation
-                 :stage :rate-limit))
-              (when (or (null retry-after)
-                        (and max-wait (>= elapsed max-wait))
-                        (and max-wait (> retry-after (- max-wait elapsed))))
-                (return
+             (when active-token
+               (%check-cancellation-token active-token))
+             (%sleep sleeper retry-after)
+             (when active-token
+               (%check-cancellation-token active-token))
+             (let ((after (%monotonic-seconds clock units)))
+               (when (and active-deadline
+                          (>= after active-deadline))
+                 (%signal-deadline-exceeded
+                  resilience-clock
+                  resilience-units
+                  active-deadline
+                  :operation operation
+                  :stage :rate-limit))
+               (when (<= after now)
+                 (return
                   (%reject-rate-limiter-acquire
-                   requested available retry-after operation :wait-limit
-                   signal-on-reject-p active-handler clock units observed-at)))
-              (when active-token
-                (%check-cancellation-token active-token))
-              (%sleep sleeper retry-after)
-              (when active-token
-                (%check-cancellation-token active-token))
-              (let ((after (%monotonic-seconds clock units)))
-                (when (and active-deadline
-                           (>= after active-deadline))
-                  (%signal-deadline-exceeded
-                   resilience-clock
-                   resilience-units
-                   active-deadline
-                   :operation operation
-                   :stage :rate-limit))
-                (when (<= after now)
-                  (return
-                    (%reject-rate-limiter-acquire
-                     requested available retry-after operation :no-clock-progress
-                     signal-on-reject-p active-handler clock units observed-at))))))))))))
+                   requested available retry-after operation :no-clock-progress
+                   signal-on-reject-p active-handler clock units observed-at)))))))))))

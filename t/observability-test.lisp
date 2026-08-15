@@ -24,9 +24,7 @@
     (let ((package (find-package "RESILIENCE-OBSERVABILITY")))
       (expect package :to-be-truthy)
       (when package
-        (expect (member "RESILIENCE-OBSERVABILITY"
-                        (package-nicknames package)
-                        :test #'string=)
+        (expect (eq package (find-package "CL-RESILIENCE-KIT/OBSERVABILITY"))
                 :to-be-truthy)
         (expect (find-symbol "MAKE-RESILIENCE-OBSERVABILITY" package)
                 :to-be-truthy))))
