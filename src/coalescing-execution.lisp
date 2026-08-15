@@ -72,19 +72,20 @@ signals IDEMPOTENCY-CONFLICT instead of joining an ambiguous operation."
                   (let ((settled-p nil))
                     (unwind-protect
                          (handler-case
-                             (progn
-                               (deliver
-                                promise
-                                (funcall operation-runner))
+                             (let ((result (funcall operation-runner)))
+                               (%remove-coalesced-request coalescer key promise)
+                               (deliver promise result)
                                (setf settled-p t))
                            (control-error (condition)
                              (declare (ignore condition)))
                            (promise-already-fulfilled ()
                              (setf settled-p t))
                            (error (condition)
+                             (%remove-coalesced-request coalescer key promise)
                              (%deliver-coalesced-error promise condition)
                              (setf settled-p t)))
                       (unless settled-p
+                        (%remove-coalesced-request coalescer key promise)
                         (%deliver-coalesced-error
                          promise
                          (make-condition

@@ -13,17 +13,15 @@ jobs:
   flake-check:
     name: nix flake check (${{ matrix.system }})
     runs-on: ${{ matrix.os }}
-    # flake.nix declares systems = [ "x86_64-linux" "aarch64-darwin" ], so the
-    # matrix covers exactly those two: ubuntu-latest runs x86_64-linux and
-    # macos-latest is an arm64 (aarch64-darwin) runner.
+    # CI covers x86_64-linux only. flake.nix also declares aarch64-darwin, but
+    # a local `nix flake check` on a developer's macOS machine already covers
+    # that system, and it is the one platform CI cannot reach cheaply.
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             system: x86_64-linux
-          - os: macos-latest
-            system: aarch64-darwin
     # `nix flake check` runs the package build, the test check (120s
     # execution limit), the coverage check (300s execution limit), and the
     # paredit-lint check in one invocation, on top of a cold build of the
