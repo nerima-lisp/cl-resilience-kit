@@ -41,16 +41,20 @@ When working outside the development shell, the repository also documents the
 direct test commands:
 
 ```sh
-sbcl --dynamic-space-size 8192 --non-interactive --no-userinit --no-sysinit \
+sbcl --non-interactive --no-userinit --no-sysinit \
   --load run-tests.lisp
 ```
 
-The larger dynamic space works around an SBCL garbage-collector stall
-observed during ASDF's source-registry scan on some platforms; it is not a
-fix in this repository, and the direct run has not been confirmed to
-complete under it. The bootstrap script accepts either adjacent nerima-lisp
-checkouts or the shared ghq bare-clone layout and materializes missing
-sibling sources automatically for the direct run.
+The bootstrap script accepts either adjacent nerima-lisp checkouts or the
+shared ghq bare-clone layout and materializes missing sibling sources
+automatically for the direct run.
+
+**This direct path currently hangs on macOS/aarch64 with SBCL 2.6.0**, for
+both `run-tests.lisp` and the coverage entry point below. The hang is not
+caused by anything in this repository — a bare `require :asdf` plus a list
+of the same directories reproduces the stall with no project code loaded —
+and there is no known workaround at the SBCL level. `nix flake check` is the
+supported path.
 
 For a coverage report, provide an output directory or let the script use its
 default:

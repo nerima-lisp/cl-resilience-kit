@@ -139,17 +139,17 @@ paredit inspect lint src t --fail-on error
 For a direct test run:
 
 ```sh
-sbcl --dynamic-space-size 8192 --non-interactive --no-userinit --no-sysinit \
+sbcl --non-interactive --no-userinit --no-sysinit \
   --load run-tests.lisp
 ```
 
-The larger dynamic space avoids an SBCL garbage-collector stall observed
-during ASDF's source-registry scan on some platforms. The bootstrap script
-accepts either adjacent nerima-lisp checkouts or the shared ghq bare-clone
-layout and materializes missing sibling sources for the direct run. The test
-runner rejects an empty selection. See
-[Development](docs/src/project/development.md) for coverage and documentation
-workflow details.
+The bootstrap script accepts either adjacent nerima-lisp checkouts or the
+shared ghq bare-clone layout and materializes missing sibling sources for the
+direct run. The test runner rejects an empty selection. On macOS/aarch64
+with SBCL 2.6.0, this direct run currently hangs before any project code
+loads, and there is no known workaround; `nix flake check` is the supported
+path. See [Development](docs/src/project/development.md) for coverage and
+documentation workflow details.
 `nix flake check` also runs the structural `paredit` lint check from the
 pinned Nerima Lisp package.
 
