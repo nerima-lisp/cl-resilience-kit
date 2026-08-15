@@ -3,7 +3,7 @@
 (asdf:defsystem "cl-resilience-kit"
   :description "Composable resilience primitives for Common Lisp."
   :long-description "Retry, deadline, circuit-breaker, bulkhead, and rate-limiter primitives built on Nerima Lisp packages and injectable boundary objects."
-  :version "2.0.0"
+  :version "1.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -49,7 +49,6 @@
                (:file "distributed-circuit-breaker-execution")
                (:file "distributed-circuit-breaker-api")
                (:file "bulkhead-definition")
-               (:file "bulkhead-admission")
                (:file "bulkhead-execution")
                (:file "bulkhead")
                (:file "rate-limiter-definition")
@@ -76,7 +75,7 @@
 (asdf:defsystem "cl-resilience-kit/observability"
   :description "Direct cl-observability-kit metrics for resilience events."
   :long-description "An optional metrics integration that publishes resilience event counts and durations through cl-observability-kit."
-  :version "2.0.0"
+  :version "1.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -92,7 +91,7 @@
 (asdf:defsystem "cl-resilience-kit/dataflow"
   :description "Optional cl-dataflow integration for resilient pipeline stages."
   :long-description "An optional dataflow integration that wraps cl-dataflow node handlers with cl-resilience-kit execution boundaries."
-  :version "2.0.0"
+  :version "1.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -110,7 +109,7 @@
 (asdf:defsystem "cl-resilience-kit/test"
   :description "Tests for cl-resilience-kit."
   :long-description "Deterministic cl-weave tests for retry, deadline, breaker, bulkhead, rate limiter, and composition semantics."
-  :version "2.0.0"
+  :version "1.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -127,6 +126,9 @@
                (:file "data-validation-test")
                (:file "retry-policy-test")
                (:file "retry-test")
+               (:file "retry-backoff-boundary-test")
+               (:file "retry-budget-test")
+               (:file "retry-deadline-result-test")
                (:file "deadline-test")
                (:file "breaker-test")
                (:file "bulkhead-test")
@@ -134,20 +136,30 @@
                (:file "bulkhead-admission-test")
                (:file "composition-test")
                (:file "composition-context-test")
+               (:file "composition-coalescing-test")
                (:file "backend-timeout-test")
                (:file "contract-test")
                (:file "contract-edge-test")
+               (:file "contract-edge-isolation-test")
+               (:file "contract-edge-retry-test")
                (:file "distributed-contract-test")
+               (:file "distributed-contract-cas-test")
+               (:file "distributed-contract-state-test")
                (:file "distributed-execution-contract-test")
+               (:file "retry-distributed-lifecycle-test")
+               (:file "retry-distributed-state-test")
                (:file "condition-contract-test")
-               (:file "cps-test"))
+               (:file "cps-test")
+               (:file "fast-path-equivalence-test")
+               (:file "asd-registration-test")
+               (:file "src-registration-test"))
   :perform (asdf:test-op (operation component)
              (declare (ignore operation component))
              (uiop:symbol-call :cl-resilience-kit/test :run-tests)))
 
 (asdf:defsystem "cl-resilience-kit/observability-test"
   :description "Optional cl-observability-kit integration tests."
-  :version "2.0.0"
+  :version "1.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/observability")
   :pathname "t"
@@ -160,7 +172,7 @@
 
 (asdf:defsystem "cl-resilience-kit/dataflow-test"
   :description "Optional cl-dataflow integration tests."
-  :version "2.0.0"
+  :version "1.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/dataflow")
   :pathname "t"
@@ -174,7 +186,7 @@
 
 (asdf:defsystem "cl-resilience-kit/all-test"
   :description "Full test suite for cl-resilience-kit, including optional integrations."
-  :version "2.0.0"
+  :version "1.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/observability-test"
                "cl-resilience-kit/dataflow-test")

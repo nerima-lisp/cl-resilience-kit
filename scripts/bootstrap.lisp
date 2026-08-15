@@ -67,21 +67,24 @@
     destination-directory))
 
 (defun %discover-nerima-system-directories (root)
-  (let ((bootstrap-root (%make-bootstrap-temp-directory)))
-    (remove nil
-            (mapcar
-             (lambda (name)
-               (let ((adjacent-directory (%adjacent-system-directory name root)))
-                 (cond
-                   ((uiop:directory-exists-p adjacent-directory)
-                    adjacent-directory)
-                   (t
-                    (let ((bare-repository
-                            (%ghq-bare-repository-directory name root)))
-                      (when (%git-bare-repository-p bare-repository)
-                        (%materialize-bare-repository bare-repository
-                                                     bootstrap-root)))))))
-             *bootstrap-nerima-systems*))))
+  (let ((bootstrap-root nil))
+    (flet ((bootstrap-root ()
+             (or bootstrap-root
+                 (setf bootstrap-root (%make-bootstrap-temp-directory)))))
+      (remove nil
+              (mapcar
+               (lambda (name)
+                 (let ((adjacent-directory (%adjacent-system-directory name root)))
+                   (cond
+                     ((uiop:directory-exists-p adjacent-directory)
+                      adjacent-directory)
+                     (t
+                      (let ((bare-repository
+                              (%ghq-bare-repository-directory name root)))
+                        (when (%git-bare-repository-p bare-repository)
+                          (%materialize-bare-repository bare-repository
+                                                        (bootstrap-root))))))))
+               *bootstrap-nerima-systems*)))))
 
 (defun bootstrap-cl-resilience-kit (root)
   "Register the project and adjacent NERIMA systems for a local run.

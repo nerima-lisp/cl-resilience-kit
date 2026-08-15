@@ -49,6 +49,13 @@ The bootstrap script accepts either adjacent nerima-lisp checkouts or the
 shared ghq bare-clone layout and materializes missing sibling sources
 automatically for the direct run.
 
+**This direct path currently hangs on macOS/aarch64 with SBCL 2.6.0**, for
+both `run-tests.lisp` and the coverage entry point below. The hang is not
+caused by anything in this repository — a bare `require :asdf` plus a list
+of the same directories reproduces the stall with no project code loaded —
+and there is no known workaround at the SBCL level. `nix flake check` is the
+supported path.
+
 For a coverage report, provide an output directory or let the script use its
 default:
 

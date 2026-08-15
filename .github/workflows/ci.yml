@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  flake-check:
+    name: nix flake check (${{ matrix.system }})
+    runs-on: ${{ matrix.os }}
+    # CI covers x86_64-linux only. flake.nix also declares aarch64-darwin, but
+    # a local `nix flake check` on a developer's macOS machine already covers
+    # that system, and it is the one platform CI cannot reach cheaply.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            system: x86_64-linux
+    # `nix flake check` runs the package build, the test check (120s
+    # execution limit), the coverage check (300s execution limit), and the
+    # paredit-lint check in one invocation, on top of a cold build of the
+    # full dependency graph declared in flake.nix (cl-nix-forge, cl-weave,
+    # paredit-cli, cl-boundary-kit, cl-concurrent-kit, cl-date-kit,
+    # cl-observability-kit, cl-prolog, cl-dataflow, treefmt-nix). None of
+    # that is cached ahead of time on a fresh runner, so the budget below is
+    # well above the 120s/300s in-check limits to leave room for evaluation
+    # and compilation.
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: nix flake check
+        run: nix flake check -L

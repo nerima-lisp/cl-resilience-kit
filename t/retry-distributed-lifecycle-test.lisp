@@ -93,10 +93,17 @@
        registry :cache (lambda () nil))
       (expect (resilience-kit:health-live-p registry) :to-be-truthy)
       (expect (resilience-kit:health-ready-p registry) :to-be nil)
-      (expect
-       (every (lambda (entry)
-                (member (getf entry :status) '(:healthy :unhealthy)))
-              (resilience-kit:health-report registry))
-       :to-be-truthy)
+      (let ((report (resilience-kit:health-report registry)))
+        (expect (length report) :to-be 2)
+        (let ((database-entry
+                (find :database report
+                      :key (lambda (entry) (getf entry :name))))
+              (cache-entry
+                (find :cache report
+                      :key (lambda (entry) (getf entry :name)))))
+          (expect (getf database-entry :status) :to-be :healthy)
+          (expect (getf database-entry :value) :to-be-truthy)
+          (expect (getf cache-entry :status) :to-be :unhealthy)
+          (expect (getf cache-entry :value) :to-be nil)))
       (resilience-kit:unregister-health-check registry :cache)
       (expect (resilience-kit:health-ready-p registry) :to-be-truthy))))

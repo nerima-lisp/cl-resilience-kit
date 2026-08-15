@@ -65,9 +65,10 @@ syntax; the test system alone depends on `cl-weave`. The development shell
 also pins the Nerima Lisp `paredit-cli` package and exposes it as the
 `paredit` command for structural linting.
 
-Load the ASDF systems by their `cl-...` names, then use the shorter Nerima Lisp
-package nicknames in code: `resilience-kit`,
-`resilience-observability`, and `resilience-dataflow`.
+Load the ASDF systems by their `cl-...` names, then use the Nerima Lisp
+package names in code: `resilience-kit`, `resilience-observability`, and
+`resilience-dataflow`. The `cl-...` forms remain available as compatibility
+nicknames.
 
 ```common-lisp
 (asdf:load-system :cl-resilience-kit)
@@ -144,9 +145,11 @@ sbcl --non-interactive --no-userinit --no-sysinit \
 
 The bootstrap script accepts either adjacent nerima-lisp checkouts or the
 shared ghq bare-clone layout and materializes missing sibling sources for the
-direct run. The test runner rejects an empty selection. See
-[Development](docs/src/project/development.md) for coverage and documentation
-workflow details.
+direct run. The test runner rejects an empty selection. On macOS/aarch64
+with SBCL 2.6.0, this direct run currently hangs before any project code
+loads, and there is no known workaround; `nix flake check` is the supported
+path. See [Development](docs/src/project/development.md) for coverage and
+documentation workflow details.
 `nix flake check` also runs the structural `paredit` lint check from the
 pinned Nerima Lisp package.
 

@@ -8,18 +8,18 @@
   (if effective-deadline
       (let ((*resilience-clock* active-clock)
             (*resilience-monotonic-units-per-second* units)
-            (*resilience-deadline* effective-deadline))
+            (*resilience-deadline* effective-deadline)
+            (*resilience-cancellation-token* active-token))
+        (%check-active-cancellation-token)
+        (let ((now (%monotonic-seconds active-clock units)))
+          (when (>= now effective-deadline)
+            (%signal-deadline-exceeded
+             active-clock units effective-deadline
+             :operation operation :stage :before-operation)))
         (if active-token
-            (let ((*resilience-cancellation-token* active-token))
-              (%check-active-cancellation-token)
-              (let ((now (%monotonic-seconds active-clock units)))
-                (when (>= now effective-deadline)
-                  (%signal-deadline-exceeded
-                   active-clock units effective-deadline
-                   :operation operation :stage :before-operation)))
-              (%execute-attempt*
-               thunk active-clock units effective-deadline
-               per-attempt-timeout operation 1))
+            (%execute-attempt*
+             thunk active-clock units effective-deadline
+             per-attempt-timeout operation 1)
             (%execute-attempt-without-cancellation*
              thunk active-clock units effective-deadline
              per-attempt-timeout operation 1)))
@@ -32,6 +32,87 @@
                   (funcall thunk)
                 (%check-active-cancellation-token)))
             (funcall thunk)))))
+
+(defun %call-with-retry-runtime
+    (policy thunk per-attempt-timeout active-sleeper track-results-p
+     max-attempts effective-deadline retry-budget fallback active-handler
+     operation active-clock units)
+  "Run the multi-attempt retry loop for %CALL-WITH-RETRY*.
+
+Expects *RESILIENCE-CLOCK*, *RESILIENCE-MONOTONIC-UNITS-PER-SECOND*,
+*RESILIENCE-DEADLINE*, *RESILIENCE-CANCELLATION-TOKEN*, and
+*RESILIENCE-EVENT-HANDLER* already bound by the caller; this function does
+not rebind them. TRACK-RESULTS-P and MAX-ATTEMPTS are the caller's
+precomputed mirrors of what %RUN-RETRY-ATTEMPT and %RETRY-EXHAUSTED-P
+re-derive from POLICY themselves, so they are accepted for interface
+symmetry with the caller and are not consulted here."
+  (declare (ignore track-results-p max-attempts))
+  (labels ((run-loop (attempt previous-delay)
+             (handler-case
+                 (%run-retry-attempt
+                  #'run-loop policy thunk attempt previous-delay
+                  active-clock units effective-deadline
+                  per-attempt-timeout active-sleeper operation
+                  retry-budget active-handler)
+               ;; ATTEMPT-TIMEOUT is retryable only when the caller's
+               ;; classifier explicitly opts into retrying it.
+               (attempt-timeout (condition)
+                 (%handle-retry-condition
+                  #'run-loop policy attempt previous-delay condition
+                  active-clock units effective-deadline
+                  active-sleeper operation retry-budget
+                  active-handler fallback))
+               ;; The overall deadline is terminal for the complete
+               ;; operation; it is never converted into another attempt.
+               (deadline-exceeded (condition)
+                 (error condition))
+               (resilience-cancelled (condition)
+                 (error condition))
+               (retry-classifier-error (condition)
+                 (error condition))
+               (error (condition)
+                 (%handle-retry-condition
+                  #'run-loop policy attempt previous-delay condition
+                  active-clock units effective-deadline
+                  active-sleeper operation retry-budget
+                  active-handler fallback)))))
+    (handler-case
+        (progn
+          (%check-active-cancellation-token)
+          (when (and effective-deadline
+                     (>= (%monotonic-seconds active-clock units)
+                         effective-deadline))
+            (%signal-deadline-exceeded
+             active-clock units effective-deadline
+             :operation operation :stage :before-operation))
+          (run-loop 1 nil))
+      (retry-exhausted (condition)
+        (%invoke-retry-fallback
+         fallback condition active-handler operation
+         (retry-exhausted-attempts condition)
+         active-clock units))
+      (deadline-exceeded (condition)
+        (%emit-resilience-event
+         active-handler :deadline-exceeded
+         :operation operation :attempt
+         (deadline-exceeded-attempt condition)
+         :stage (deadline-exceeded-stage condition)
+         :condition condition :clock active-clock
+         :monotonic-units-per-second units)
+        (%invoke-retry-fallback
+         fallback condition active-handler operation nil
+         active-clock units))
+      (resilience-cancelled (condition)
+        (%emit-resilience-event
+         active-handler :cancelled
+         :operation operation :condition condition
+         :reason (resilience-cancelled-reason condition)
+         :clock active-clock :monotonic-units-per-second units)
+        (%invoke-retry-fallback
+         fallback condition active-handler operation nil
+         active-clock units))
+      (retry-classifier-error (condition)
+        (error condition)))))
 
 (defun %call-with-retry*
     (policy thunk overall-timeout overall-deadline per-attempt-timeout
@@ -122,11 +203,3 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
    clock monotonic-units-per-second sleeper operation retry-budget
    cancellation-token event-handler fallback))
 
-(defmacro with-retry
-    ((policy &rest options) &body body)
-  "Evaluate BODY through CALL-WITH-RETRY.
-
-POLICY and OPTIONS are evaluated by CALL-WITH-RETRY in the surrounding
-lexical environment.  The macro is the block-oriented counterpart of the
-first-class CALL-WITH-RETRY function."
-  `(call-with-retry ,policy (lambda () ,@body) ,@options))

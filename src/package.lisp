@@ -92,6 +92,11 @@
    #:make-resilience-observer
    #:resilience-observer-handlers
    #:resilience-observer-handler
+   #:resilience-observer-warning
+   #:resilience-observer-warning-phase
+   #:resilience-observer-warning-handler
+   #:resilience-observer-warning-event
+   #:resilience-observer-warning-cause
 
    ;; Distributed state and fencing leases.
    #:resilience-state-store

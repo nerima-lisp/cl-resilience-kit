@@ -17,9 +17,10 @@ adds direct `cl-observability-kit` metrics, and the optional
 `cl-resilience-kit/dataflow` system wraps `cl-dataflow` pipeline handlers with
 the same resilience contracts; the test system alone uses `cl-weave`.
 
-Load the ASDF systems by their `cl-...` names, then use the shorter Nerima Lisp
-package nicknames in code: `resilience-kit`,
-`resilience-observability`, and `resilience-dataflow`.
+Load the ASDF systems by their `cl-...` names, then use the Nerima Lisp
+package names in code: `resilience-kit`, `resilience-observability`, and
+`resilience-dataflow`. The `cl-...` forms remain available as compatibility
+nicknames.
 
 ### Nix
 

@@ -2,6 +2,7 @@
   (:nicknames #:cl-resilience-kit/observability)
   (:use #:cl)
   (:import-from #:resilience-kit
+                #:record-resilience-event
                 #:resilience-event
                 #:resilience-event-duration
                 #:resilience-event-operation
@@ -11,8 +12,6 @@
                 #:define-counter
                 #:define-histogram
                 #:make-metric-registry
-                #:metric-inc
-                #:metric-observe
                 #:metric-registry)
   (:export #:resilience-observability
            #:resilience-observability-p
@@ -49,6 +48,7 @@
 (declaim (inline %event-label
                  %ensure-observability-label-bucket
                  %event-state
+                 %observability-duration-series
                  %ensure-observability-metric-series
                  %observability-cache-state
                  %observability-series-inc
@@ -62,7 +62,7 @@
 
 (defun %record-observability-event/default*
     (label-cache events durations state-cache event)
-  (let ((state (%event-state label-cache events durations state-cache event)))
+  (let ((state (%event-state label-cache events state-cache event)))
     (%observability-series-inc
      (%observability-label-state-events-series state))
     (let ((duration
@@ -71,7 +71,7 @@
       (declare (type (or null double-float) duration))
       (when duration
         (let ((series
-                (%observability-label-state-durations-series state)))
+                (%observability-duration-series durations state)))
           (incf (observability-kit::%metric-series-count series))
           (incf (observability-kit::%metric-series-sum series) duration)
           (%observability-increment-default-buckets series duration)))))
@@ -79,7 +79,7 @@
 
 (defun %record-observability-event/custom*
     (label-cache events durations state-cache event)
-  (let ((state (%event-state label-cache events durations state-cache event)))
+  (let ((state (%event-state label-cache events state-cache event)))
     (%observability-series-inc
      (%observability-label-state-events-series state))
     (let ((duration
@@ -88,7 +88,7 @@
       (declare (type (or null double-float) duration))
       (when duration
         (let ((series
-                (%observability-label-state-durations-series state)))
+                (%observability-duration-series durations state)))
           (incf (observability-kit::%metric-series-count series))
           (incf (observability-kit::%metric-series-sum series) duration)
           (%observability-increment-buckets durations series duration)))))
@@ -115,14 +115,14 @@
            (make-hash-table :test #'equal))
          (events
            (define-counter
-            active-registry 'resilience_events_total
+            active-registry resilience_events_total
             :help "Number of resilience events."
             :unit "events"
             :label-names '("event_type" "operation")
             :cardinality-limit cardinality-limit))
          (durations
            (define-histogram
-            active-registry 'resilience_event_duration_seconds
+            active-registry resilience_event_duration_seconds
             :help "Observed resilience event duration."
             :unit "seconds"
             :label-names '("event_type" "operation")
@@ -167,7 +167,15 @@
                    (equal operation cached-operation)))
       (svref state-cache 2))))
 
-(defun %event-state (cache events durations state-cache event)
+(defun %event-state (cache events state-cache event)
+  "Return the cached per-label-combination state for EVENT, creating it
+if this is the first time EVENT-TYPE/OPERATION have been seen.
+
+The events counter series is created eagerly here since every recorded
+event increments it.  The duration series is deliberately left NIL: a
+label combination whose events never carry a finite duration must not
+register a phantom zero-valued series in the histogram.  See
+%OBSERVABILITY-DURATION-SERIES, which creates it lazily on first use."
   (let* ((event-type (resilience-event-type event))
          (operation (resilience-event-operation event))
          (cached-state
@@ -185,11 +193,19 @@
                              (%make-observability-label-state
                               labels
                               (%ensure-observability-metric-series events labels)
-                              (%ensure-observability-metric-series durations labels)))))))
+                              nil))))))
           (setf (svref state-cache 0) event-type
                 (svref state-cache 1) operation
                 (svref state-cache 2) state)
           state))))
+
+(defun %observability-duration-series (durations state)
+  "Lazily create and cache the duration series for STATE in DURATIONS."
+  (or (%observability-label-state-durations-series state)
+      (setf (%observability-label-state-durations-series state)
+            (%ensure-observability-metric-series
+             durations
+             (%observability-label-state-labels state)))))
 
 (defun %ensure-observability-metric-series (metric labels)
   (cl-concurrent-kit:with-lock-held
@@ -285,9 +301,8 @@
            (float duration 1d0)))
     (t nil)))
 
-(defun record-resilience-event (observability event)
+(defmethod record-resilience-event ((observability resilience-observability) event)
   "Publish EVENT to OBSERVABILITY and return EVENT."
-  (check-type observability resilience-observability)
   (check-type event resilience-event)
   (%record-observability-event*
    (resilience-observability-%label-cache observability)

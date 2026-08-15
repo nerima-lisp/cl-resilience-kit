@@ -143,37 +143,47 @@
     (remhash name (%health-registry-checks registry)))
   registry)
 
+(defun %health-registry-entries (registry)
+  (cl-concurrent-kit:with-lock-held ((%health-registry-lock registry))
+    (loop for name being the hash-keys of (%health-registry-checks registry)
+          using (hash-value checker)
+          collect (cons name checker))))
+
+(defun %evaluate-health-check (entry)
+  "Run one (NAME . CHECKER) ENTRY once and return its HEALTH-REPORT
+plist. Shared by HEALTH-REPORT, which needs an entry for every
+registered check, and HEALTH-READY-P, which only needs the :STATUS
+of each entry and stops requesting further ones once one comes back
+unhealthy."
+  (handler-case
+      (let ((value (funcall (cdr entry))))
+        (list :name (car entry)
+              :status (if value :healthy :unhealthy)
+              :value value))
+    (error (condition)
+      (list :name (car entry)
+            :status :unhealthy
+            :condition condition))))
+
 (defun health-report (registry)
   (check-type registry health-registry)
-  (let ((checks
-          (cl-concurrent-kit:with-lock-held ((%health-registry-lock registry))
-            (loop for name being the hash-keys of (%health-registry-checks registry)
-                  using (hash-value checker)
-                  collect (cons name checker)))))
-    (loop for entry in checks
-          collect
-          (handler-case
-              (let ((value (funcall (cdr entry))))
-                (list :name (car entry)
-                      :status (if value :healthy :unhealthy)
-                      :value value))
-            (error (condition)
-              (list :name (car entry)
-                    :status :unhealthy
-                    :condition condition))))))
+  (mapcar #'%evaluate-health-check (%health-registry-entries registry)))
 
 (defun health-ready-p (registry)
+  "Return T when every registered health check currently reports
+healthy, and NIL when none are registered.
+
+Stops at the first check that fails or signals rather than running
+every registered checker: HEALTH-REPORT must invoke all of them to
+build a complete report, but a readiness probe only needs a boolean,
+and health checkers commonly perform network calls or emit metrics
+that should not fire once an earlier check has already failed."
   (check-type registry health-registry)
-  (let ((checks
-          (cl-concurrent-kit:with-lock-held ((%health-registry-lock registry))
-            (loop for checker being the hash-values of (%health-registry-checks registry)
-                  collect checker))))
-    (and checks
-         (loop for checker in checks
-               always
-               (handler-case
-                   (funcall checker)
-                 (error () nil))))))
+  (let ((entries (%health-registry-entries registry)))
+    (and entries
+         (loop for entry in entries
+               always (eq (getf (%evaluate-health-check entry) :status)
+                          :healthy)))))
 
 (defun health-live-p (registry)
   (declare (ignore registry))

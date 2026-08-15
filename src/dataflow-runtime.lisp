@@ -1,12 +1,19 @@
 (in-package #:resilience-dataflow)
 
 (defun %merge-resilience-options (defaults overrides)
+  "Merge two resilience-options plists into one plist with each key
+appearing at most once. OVERRIDES wins over DEFAULTS for a shared key;
+call-with-resilience rejects a plist with a repeated keyword option."
   (cond ((null defaults)
          overrides)
         ((null overrides)
          defaults)
         (t
-         (append overrides defaults))))
+         (let ((missing (gensym "MISSING-OPTION")))
+           (append overrides
+                   (loop for (key value) on defaults by #'cddr
+                         when (eq (getf overrides key missing) missing)
+                           append (list key value)))))))
 
 (defun %copy-resilience-options (resilience-options)
   (copy-list resilience-options))

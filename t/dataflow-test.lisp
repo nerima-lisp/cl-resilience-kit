@@ -25,9 +25,7 @@
     (let ((package (find-package "RESILIENCE-DATAFLOW")))
       (expect package :to-be-truthy)
       (when package
-        (expect (member "RESILIENCE-DATAFLOW"
-                        (package-nicknames package)
-                        :test #'string=)
+        (expect (eq package (find-package "CL-RESILIENCE-KIT/DATAFLOW"))
                 :to-be-truthy)
         (expect (find-symbol "DEFINE-PIPELINE" package)
                 :to-be-truthy)

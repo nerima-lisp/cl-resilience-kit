@@ -28,6 +28,13 @@ when the event was created."
 (defun %active-event-handler (handler)
   (or handler *resilience-event-handler*))
 
+(defun %warn-observer-error (phase handler event cause)
+  (warn 'resilience-observer-warning
+        :phase phase
+        :handler handler
+        :event event
+        :cause cause))
+
 (defun %emit-resilience-event*
     (handler type operation attempt stage condition result delay reason
      timestamp context metadata duration clock monotonic-units-per-second)
@@ -53,9 +60,10 @@ when the event was created."
                (or context *resilience-context*)
                metadata
                duration)))
-      (handler-case
-          (funcall active-handler event)
-        (error () nil))))
+        (handler-case
+            (funcall active-handler event)
+          (error (cause)
+            (%warn-observer-error :event-handler active-handler event cause)))))
     (when metrics
       (%record-resilience-event* metrics
                                  type
@@ -128,21 +136,24 @@ when the event was created."
 
 (defun %record-resilience-event* (metrics type operation duration)
   (declare (type resilience-metrics metrics))
-  (let ((key (%resilience-metrics-key type operation)))
+  (let ((key (%resilience-metrics-key type operation))
+        (finite-duration (%finite-duration-seconds duration)))
     (cl-concurrent-kit:with-lock-held ((%resilience-metrics-lock metrics))
       (incf (%resilience-metrics-total-events metrics))
       (incf (gethash key (%resilience-metrics-counts metrics) 0))
-      (when duration
+      (when finite-duration
         (incf (gethash key (%resilience-metrics-durations metrics) 0d0)
-              (float duration 1d0)))))
+              finite-duration))))
   metrics)
 
-(defun record-resilience-event (metrics event)
-  "Record EVENT in METRICS and return EVENT.
+(defgeneric record-resilience-event (metrics event)
+  (:documentation
+   "Record EVENT in METRICS and return EVENT.
 
   Metrics are intentionally low-cardinality only when callers use stable
-operation names.  No labels are synthesized from condition text."
-  (check-type metrics resilience-metrics)
+operation names.  No labels are synthesized from condition text."))
+
+(defmethod record-resilience-event ((metrics resilience-metrics) event)
   (check-type event resilience-event)
   (%record-resilience-event metrics event))
 
@@ -220,23 +231,27 @@ operation names.  No labels are synthesized from condition text."
   (dolist (handler handlers)
     (handler-case
         (funcall handler event)
-      (error () nil)))
+      (error (cause)
+        (%warn-observer-error :observer handler event cause))))
   event)
 
 (defun %call-resilience-observer-handler (handler event)
   (handler-case
       (funcall handler event)
-    (error () nil))
+    (error (cause)
+      (%warn-observer-error :observer handler event cause)))
   event)
 
 (defun %call-two-resilience-observer-handlers
     (first-handler second-handler event)
   (handler-case
       (funcall first-handler event)
-    (error () nil))
+    (error (cause)
+      (%warn-observer-error :observer first-handler event cause)))
   (handler-case
       (funcall second-handler event)
-    (error () nil))
+    (error (cause)
+      (%warn-observer-error :observer second-handler event cause)))
   event)
 
 (defun %make-resilience-observer-handler (handlers)
