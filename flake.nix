@@ -62,11 +62,11 @@
       inputs.treefmt-nix.follows = "treefmt-nix";
     };
 
-    # cl-dataflow's runtime depends on cl-prolog. Both can be consumed as
+    # cl-dataflow-kit's runtime depends on cl-prolog-kit. Both can be consumed as
     # source trees here, which avoids requiring an upstream per-system package
     # output on aarch64-darwin.
-    cl-prolog = {
-      url = "github:nerima-lisp/cl-prolog/v1.4.3";
+    cl-prolog-kit = {
+      url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
       flake = false;
     };
 
@@ -81,8 +81,8 @@
       inputs.treefmt-nix.follows = "treefmt-nix";
     };
 
-    cl-dataflow = {
-      url = "github:nerima-lisp/cl-dataflow/v1.1.1";
+    cl-dataflow-kit = {
+      url = "github:nerima-lisp/cl-dataflow-kit/v1.2.0";
       flake = false;
     };
   };
@@ -96,8 +96,8 @@
       cl-boundary-kit,
       cl-concurrent-kit,
       cl-date-kit,
-      cl-prolog,
-      cl-dataflow,
+      cl-prolog-kit,
+      cl-dataflow-kit,
       cl-observability-kit,
       paredit-cli,
       treefmt-nix,
@@ -161,14 +161,14 @@
         ctx:
         let
           prolog = ctx.cl.lispDerivation {
-            lispSystem = "cl-prolog";
-            version = ctx.cl.fromAsdSystem "${cl-prolog}/cl-prolog.asd";
-            src = cl-prolog;
+            lispSystem = "cl-prolog-kit";
+            version = ctx.cl.fromAsdSystem "${cl-prolog-kit}/cl-prolog-kit.asd";
+            src = cl-prolog-kit;
           };
           dataflow = ctx.cl.lispDerivation {
-            lispSystem = "cl-dataflow";
-            version = ctx.cl.fromAsdSystem "${cl-dataflow}/cl-dataflow.asd";
-            src = cl-dataflow;
+            lispSystem = "cl-dataflow-kit";
+            version = ctx.cl.fromAsdSystem "${cl-dataflow-kit}/cl-dataflow-kit.asd";
+            src = cl-dataflow-kit;
             lispDependencies = [
               prolog
               cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit

@@ -61,7 +61,7 @@ This path has real preconditions:
 
 - It depends on the Nerima Lisp packages `cl-boundary-kit`,
   `cl-concurrent-kit`, `cl-date-kit`, and (for the full test suite)
-  `cl-dataflow`, `cl-observability-kit`, `cl-prolog`, and `cl-weave`. None of
+  `cl-dataflow-kit`, `cl-observability-kit`, `cl-prolog-kit`, and `cl-weave`. None of
   these are published on Quicklisp.
 - `scripts/bootstrap.lisp` resolves them either from adjacent nerima-lisp
   checkouts at `../<name>/` next to this repository, or from a ghq

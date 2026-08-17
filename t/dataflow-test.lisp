@@ -20,7 +20,7 @@
      (declare (ignore condition attempt))
      t)))
 
-(describe "cl-dataflow integration"
+(describe "cl-dataflow-kit integration"
   (it "exports the nerima-lisp package nickname"
     (let ((package (find-package "RESILIENCE-DATAFLOW")))
       (expect package :to-be-truthy)
@@ -42,10 +42,10 @@
         (expect (find-symbol "DEFINE-RESILIENCE-PIPELINE" package)
                 :to-be-truthy))))
 
-  (it "re-exports direct cl-dataflow entry points"
+  (it "re-exports direct cl-dataflow-kit entry points"
     (with-soft-assertions
       (expect (eq (find-symbol "DEFINE-PIPELINE" "RESILIENCE-DATAFLOW")
-                  (find-symbol "DEFINE-PIPELINE" "CL-DATAFLOW"))
+                  (find-symbol "DEFINE-PIPELINE" "CL-DATAFLOW-KIT"))
               :to-be-truthy)
       (expect (eq (nth-value 1
                              (find-symbol "DEFINE-PIPELINE"
@@ -132,7 +132,7 @@
         (expect (typep pipeline-node 'node)
                 :to-be-truthy))))
 
-  (it "forwards cl-dataflow context into the wrapped operation"
+  (it "forwards cl-dataflow-kit context into the wrapped operation"
     (let ((pipeline
             (make-resilience-pipeline
              :name "capture-context"
@@ -150,7 +150,7 @@
        (pipeline :input 21 :context context)
        '(21 "req-42"))))
 
-  (it "preserves cl-dataflow node interface fields"
+  (it "preserves cl-dataflow-kit node interface fields"
     (let ((node
             (make-resilience-node
              :name "annotated"
@@ -194,7 +194,7 @@
               :to-be
               24)))
 
-  (it-fuzz "keeps cl-dataflow pipeline semantics across generated inputs"
+  (it-fuzz "keeps cl-dataflow-kit pipeline semantics across generated inputs"
       ((value (gen-integer :min -8 :max 8)))
       (:trials 10 :timeout-per-trial 1)
     (let ((pipeline

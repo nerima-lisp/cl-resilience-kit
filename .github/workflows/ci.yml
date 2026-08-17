@@ -27,7 +27,7 @@ jobs:
     # paredit-lint check in one invocation, on top of a cold build of the
     # full dependency graph declared in flake.nix (cl-nix-forge, cl-weave,
     # paredit-cli, cl-boundary-kit, cl-concurrent-kit, cl-date-kit,
-    # cl-observability-kit, cl-prolog, cl-dataflow, treefmt-nix). None of
+    # cl-observability-kit, cl-prolog-kit, cl-dataflow-kit, treefmt-nix). None of
     # that is cached ahead of time on a fresh runner, so the budget below is
     # well above the 120s/300s in-check limits to leave room for evaluation
     # and compilation.

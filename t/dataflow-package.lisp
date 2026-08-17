@@ -25,7 +25,7 @@
                 #:make-resilience-pipeline-node
                 #:run-pipeline
                 #:run-resilience-pipeline)
-  (:import-from #:cl-dataflow
+  (:import-from #:cl-dataflow-kit
                 #:context-metadata
                 #:make-context
                 #:node

@@ -14,7 +14,7 @@ The production system uses the Nerima Lisp packages `cl-boundary-kit` for
 injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
 for executor timing. The optional `cl-resilience-kit/observability` system
 adds direct `cl-observability-kit` metrics, and the optional
-`cl-resilience-kit/dataflow` system wraps `cl-dataflow` pipeline handlers with
+`cl-resilience-kit/dataflow` system wraps `cl-dataflow-kit` pipeline handlers with
 the same resilience contracts; the test system alone uses `cl-weave`.
 
 Load the ASDF systems by their `cl-...` names, then use the Nerima Lisp

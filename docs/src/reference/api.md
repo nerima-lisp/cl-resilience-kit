@@ -171,9 +171,9 @@ semantics; dynamic or unsupported option lists use normal runtime validation.
 
 | Entry point | Purpose |
 | --- | --- |
-| `define-pipeline`, `make-node`, `make-pipeline`, `pipeline`, `pipeline->node`, `run-pipeline` | Direct `cl-dataflow` API re-exported from `resilience-dataflow`, so consuming code can stay on the Nerima Lisp package nickname while mixing plain and resilience-aware pipeline building. |
-| `define-resilience-pipeline ((&rest options) &body clauses)` | Preferred source-level API. Expand to `cl-dataflow:define-pipeline`, wrapping each `:node` handler with `call-with-resilience`. Top-level and node-local forms accept `:resilience-options`. |
-| `make-resilience-node (&key name operation inputs outputs metadata resilience-options)` | Runtime constructor for one `cl-dataflow` node whose handler runs through `call-with-resilience`. |
-| `make-resilience-pipeline (&key name operation metadata inputs outputs resilience-options)` | Runtime constructor for a one-stage `cl-dataflow` pipeline around an operation. |
-| `make-resilience-pipeline-node (&key name operation metadata inputs outputs resilience-options)` | Runtime constructor that re-exports a resilience-wrapped pipeline as an embeddable `cl-dataflow` node. |
-| `run-resilience-pipeline (pipeline &key input context parallel)` | Run a `cl-dataflow` pipeline through `cl-dataflow:run-pipeline`. |
+| `define-pipeline`, `make-node`, `make-pipeline`, `pipeline`, `pipeline->node`, `run-pipeline` | Direct `cl-dataflow-kit` API re-exported from `resilience-dataflow`, so consuming code can stay on the Nerima Lisp package nickname while mixing plain and resilience-aware pipeline building. |
+| `define-resilience-pipeline ((&rest options) &body clauses)` | Preferred source-level API. Expand to `cl-dataflow-kit:define-pipeline`, wrapping each `:node` handler with `call-with-resilience`. Top-level and node-local forms accept `:resilience-options`. |
+| `make-resilience-node (&key name operation inputs outputs metadata resilience-options)` | Runtime constructor for one `cl-dataflow-kit` node whose handler runs through `call-with-resilience`. |
+| `make-resilience-pipeline (&key name operation metadata inputs outputs resilience-options)` | Runtime constructor for a one-stage `cl-dataflow-kit` pipeline around an operation. |
+| `make-resilience-pipeline-node (&key name operation metadata inputs outputs resilience-options)` | Runtime constructor that re-exports a resilience-wrapped pipeline as an embeddable `cl-dataflow-kit` node. |
+| `run-resilience-pipeline (pipeline &key input context parallel)` | Run a `cl-dataflow-kit` pipeline through `cl-dataflow-kit:run-pipeline`. |

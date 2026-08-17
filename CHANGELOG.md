@@ -29,9 +29,9 @@ Initial public release.
   visible.
 - Optional `cl-resilience-kit/observability` system publishing resilience
   event counts and durations through `cl-observability-kit`.
-- Optional `cl-resilience-kit/dataflow` system exposing the `cl-dataflow`
+- Optional `cl-resilience-kit/dataflow` system exposing the `cl-dataflow-kit`
   API under `resilience-dataflow`, plus a `define-resilience-pipeline`
-  macro that wraps `cl-dataflow` node handlers with `call-with-resilience`.
+  macro that wraps `cl-dataflow-kit` node handlers with `call-with-resilience`.
 
 ### Notes
 
