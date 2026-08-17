@@ -58,9 +58,9 @@ The production system uses the Nerima Lisp packages `cl-boundary-kit` for
 injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
 for executor timing. The optional `cl-resilience-kit/observability` system
 adds direct `cl-observability-kit` metrics, and the optional
-`cl-resilience-kit/dataflow` system keeps the Nerima Lisp `cl-dataflow` API
+`cl-resilience-kit/dataflow` system keeps the Nerima Lisp `cl-dataflow-kit` API
 available from `resilience-dataflow` while adding the same resilience controls
-through a `define-resilience-pipeline` macro that matches `cl-dataflow`
+through a `define-resilience-pipeline` macro that matches `cl-dataflow-kit`
 syntax; the test system alone depends on `cl-weave`. The development shell
 also pins the Nerima Lisp `paredit-cli` package and exposes it as the
 `paredit` command for structural linting.

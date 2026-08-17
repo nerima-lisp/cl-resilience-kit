@@ -19,14 +19,14 @@
 ;;;
 ;;; CL-RESILIENCE-KIT/OBSERVABILITY and CL-RESILIENCE-KIT/DATAFLOW are only
 ;;; *loadable* when their external dependencies (cl-observability-kit,
-;;; cl-dataflow) are installed. That does not threaten ASDF:FIND-SYSTEM
+;;; cl-dataflow-kit) are installed. That does not threaten ASDF:FIND-SYSTEM
 ;;; below: FIND-SYSTEM only needs a system to be *defined*, and all three
 ;;; systems are defined unconditionally by defsystem forms living in the
 ;;; same cl-resilience-kit.asd file that ASDF already had to locate and
 ;;; read to find CL-RESILIENCE-KIT/TEST (this test system's own
 ;;; dependency). :depends-on is resolved only when a system is operated on
 ;;; (load-op, compile-op), never when it is merely found, so the possible
-;;; absence of cl-observability-kit or cl-dataflow cannot make
+;;; absence of cl-observability-kit or cl-dataflow-kit cannot make
 ;;; ASDF:FIND-SYSTEM signal here. Guarding this call with
 ;;; (asdf:find-system name nil) and skipping an absent system would risk
 ;;; exactly the false positive this test exists to prevent -- reporting a

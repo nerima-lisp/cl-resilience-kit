@@ -53,7 +53,7 @@ call-with-resilience rejects a plist with a repeated keyword option."
        outputs
        metadata
        (resilience-options nil))
-  "Return a cl-dataflow node whose handler runs OPERATION through call-with-resilience."
+  "Return a cl-dataflow-kit node whose handler runs OPERATION through call-with-resilience."
   (check-type operation function)
   (make-node name
              :inputs inputs
@@ -69,7 +69,7 @@ call-with-resilience rejects a plist with a repeated keyword option."
        inputs
        outputs
        (resilience-options nil))
-  "Return a one-stage cl-dataflow pipeline around OPERATION."
+  "Return a one-stage cl-dataflow-kit pipeline around OPERATION."
   (check-type operation function)
   (make-pipeline
    :stages
@@ -90,7 +90,7 @@ call-with-resilience rejects a plist with a repeated keyword option."
        inputs
        outputs
        (resilience-options nil))
-  "Wrap a resilience pipeline as a reusable cl-dataflow node."
+  "Wrap a resilience pipeline as a reusable cl-dataflow-kit node."
   (check-type operation function)
   (let ((pipeline
           (make-resilience-pipeline
@@ -103,7 +103,7 @@ call-with-resilience rejects a plist with a repeated keyword option."
     (pipeline->node pipeline name :metadata metadata)))
 
 (defun run-resilience-pipeline (pipeline &key input context parallel)
-  "Run PIPELINE through cl-dataflow and return its result."
+  "Run PIPELINE through cl-dataflow-kit and return its result."
   (check-type pipeline pipeline)
   (run-pipeline pipeline
                 :input input

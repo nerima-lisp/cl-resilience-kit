@@ -1,7 +1,7 @@
 (in-package #:resilience-dataflow-test)
 
-(describe "cl-dataflow macro integration"
-  (it "builds a resilience pipeline with cl-dataflow syntax"
+(describe "cl-dataflow-kit macro integration"
+  (it "builds a resilience pipeline with cl-dataflow-kit syntax"
     (expect-pipeline-result
      ((define-resilience-pipeline ()
         (:node "double"

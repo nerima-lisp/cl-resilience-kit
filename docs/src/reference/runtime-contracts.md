@@ -17,7 +17,7 @@ Its runtime dependencies are versioned directly in the system definition:
 The optional `cl-resilience-kit/observability` system adds direct metrics
 integration with `cl-observability-kit`, and the optional
 `cl-resilience-kit/dataflow` system adds direct pipeline integration with
-`cl-dataflow`. The test system additionally uses `cl-weave`; the production
+`cl-dataflow-kit`. The test system additionally uses `cl-weave`; the production
 system does not load the test framework.
 
 ## Flake systems

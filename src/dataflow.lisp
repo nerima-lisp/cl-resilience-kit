@@ -3,7 +3,7 @@
   (:use #:cl)
   (:import-from #:resilience-kit
                 #:call-with-resilience)
-  (:import-from #:cl-dataflow
+  (:import-from #:cl-dataflow-kit
                 #:define-pipeline
                 #:make-node
                 #:make-pipeline

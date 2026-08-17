@@ -89,8 +89,8 @@
   :components ((:file "observability")))
 
 (asdf:defsystem "cl-resilience-kit/dataflow"
-  :description "Optional cl-dataflow integration for resilient pipeline stages."
-  :long-description "An optional dataflow integration that wraps cl-dataflow node handlers with cl-resilience-kit execution boundaries."
+  :description "Optional cl-dataflow-kit integration for resilient pipeline stages."
+  :long-description "An optional dataflow integration that wraps cl-dataflow-kit node handlers with cl-resilience-kit execution boundaries."
   :version "1.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
@@ -99,7 +99,7 @@
   :bug-tracker "https://github.com/nerima-lisp/cl-resilience-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-resilience-kit.git")
   :depends-on ("cl-resilience-kit"
-               (:version "cl-dataflow" "1.1.1"))
+               (:version "cl-dataflow-kit" "1.1.1"))
   :pathname "src"
   :serial t
   :components ((:file "dataflow")
@@ -171,7 +171,7 @@
              (uiop:symbol-call :cl-resilience-kit/test :run-tests)))
 
 (asdf:defsystem "cl-resilience-kit/dataflow-test"
-  :description "Optional cl-dataflow integration tests."
+  :description "Optional cl-dataflow-kit integration tests."
   :version "1.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/dataflow")

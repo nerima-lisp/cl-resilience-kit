@@ -3,11 +3,11 @@
 (defparameter *bootstrap-nerima-systems*
   '("cl-boundary-kit"
     "cl-concurrent-kit"
-    "cl-dataflow"
+    "cl-dataflow-kit"
     "cl-date-kit"
     "cl-host-kit"
     "cl-observability-kit"
-    "cl-prolog"
+    "cl-prolog-kit"
     "cl-weave"))
 
 (defun %pathname-parent (pathname levels)
