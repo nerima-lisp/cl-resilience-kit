@@ -56,8 +56,24 @@ Make the repository available to ASDF's source registry, then load:
 
 The production system uses the Nerima Lisp packages `cl-boundary-kit` for
 injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
-for executor timing. See [Getting started](docs/src/getting-started.md) for
-optional systems and package names.
+for executor timing. The optional `cl-resilience-kit/observability` system
+adds direct `cl-observability-kit` metrics, and the optional
+`cl-resilience-kit/dataflow` system keeps the Nerima Lisp `cl-dataflow` API
+available from `resilience-dataflow` while adding the same resilience controls
+through a `define-resilience-pipeline` macro that matches `cl-dataflow`
+syntax; the test system alone depends on `cl-weave`. The development shell
+also pins the Nerima Lisp `paredit-cli` package and exposes it as the
+`paredit` command for structural linting.
+
+Load the ASDF systems by their `cl-...` names, then use the Nerima Lisp
+package names in code: `resilience-kit`, `resilience-observability`, and
+`resilience-dataflow`. The `cl-...` forms remain available as compatibility
+nicknames.
+
+```common-lisp
+(asdf:load-system :cl-resilience-kit)
+(in-package #:resilience-kit)
+```
 
 ### Nix
 
@@ -108,12 +124,11 @@ order, process-local versus distributed state, and the event model.
 
 ## Development
 
-See [Development](docs/src/project/development.md) for the complete workflow.
-The main checks are:
+From the repository root:
 
 ```sh
 nix develop
-nix run .#test
+nix run .#test               # hangs on macOS/aarch64; see below
 nix build .#coverage
 nix build .#docs
 nix flake check
@@ -121,8 +136,32 @@ nix fmt
 paredit inspect lint src t --fail-on error
 ```
 
+For a direct test run:
+
+```sh
+sbcl --non-interactive --no-userinit --no-sysinit \
+  --load run-tests.lisp
+```
+
+The bootstrap script accepts either adjacent nerima-lisp checkouts or the
+shared ghq bare-clone layout and materializes missing sibling sources for the
+direct run. The test runner rejects an empty selection. On macOS/aarch64
+with SBCL 2.6.x, both this direct run and `nix run .#test` currently hang
+before any project code loads — both execute `run-tests.lisp` on the host,
+where bootstrap discovers this developer's sibling checkouts, unlike `nix
+flake check`, which runs the same script inside the Nix build sandbox and
+completes. There is no known workaround; `nix flake check` is the supported
+path. See [Contributing](CONTRIBUTING.md) for the host-versus-sandbox
+mechanism and [Development](docs/src/project/development.md) for coverage
+and documentation workflow details.
 `nix flake check` also runs the structural `paredit` lint check from the
-pinned development dependency.
+pinned Nerima Lisp package.
+
+The test suite uses cl-weave property and fuzz tests, polling assertions,
+continuation-value assertions, mocked boundaries, and
+explicit assertion-count contracts. The direct runner applies a 30-second
+per-test timeout; the Nix test derivation retains a 120-second process-level
+timeout for build and test startup overhead.
 
 ## Contributing
 

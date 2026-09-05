@@ -23,7 +23,7 @@ nix develop
 From the repository root:
 
 ```sh
-nix run .#test              # run the test suite
+nix run .#test              # run the test suite (hangs on macOS/aarch64, see below)
 nix build .#coverage         # build the coverage report
 nix build .#docs             # build the MkDocs documentation site
 nix flake check              # run every check: build, tests, coverage, paredit lint
@@ -43,11 +43,13 @@ repository has already shipped a commit where `paredit inspect lint` reported
 defect was parenthesis-balanced but semantically malformed, so the structural
 linter had nothing to flag. Treat a passing `paredit` lint as evidence that
 the source is well-formed s-expressions, not as evidence that it builds or
-behaves correctly. Always confirm with `nix flake check` (or, at minimum,
-`nix build .#cl-resilience-kit` and `nix run .#test`) before treating a
-change as verified.
+behaves correctly. Always confirm with `nix flake check` before treating a
+change as verified. On macOS/aarch64, `nix run .#test` hangs (see below), so
+`nix flake check` has no reliable narrower substitute there; on platforms
+where the direct runner works, `nix build .#cl-resilience-kit` plus `nix run
+.#test` remains a minimal fallback.
 
-### Direct SBCL runs
+### Direct SBCL runs and `nix run .#test`
 
 The repository also documents a direct test invocation outside the Nix
 shell:
@@ -61,15 +63,34 @@ This path has real preconditions:
 
 - It depends on the Nerima Lisp packages `cl-boundary-kit`,
   `cl-concurrent-kit`, `cl-date-kit`, and (for the full test suite)
-  `cl-dataflow-kit`, `cl-observability-kit`, `cl-prolog-kit`, and `cl-weave`. None of
+  `cl-dataflow`, `cl-observability-kit`, `cl-prolog`, and `cl-weave`. None of
   these are published on Quicklisp.
 - `scripts/bootstrap.lisp` resolves them either from adjacent nerima-lisp
   checkouts at `../<name>/` next to this repository, or from a ghq
   bare-clone layout (`<name>.git/` three directories up), materializing
   missing sibling sources into a temporary tree for the direct run.
-- On macOS/aarch64 with SBCL 2.6.0, the direct test and coverage paths may
-  hang before project code loads. If that occurs, use `nix flake check`, the
-  supported path for repository checks.
+- **This path currently hangs on macOS/aarch64 with SBCL 2.6.x**, for both
+  `run-tests.lisp` and `run-coverage.lisp`. The hang is not caused by
+  anything in this repository: a bare `require :asdf` plus a list of the
+  same directories reproduces the stall with no project code loaded. SBCL's
+  garbage collector worker threads park in `semaphore_wait_trap` and make no
+  further progress. The cause is unresolved at the SBCL level, and there is
+  no known workaround — enlarging SBCL's heap only changes how far the run
+  gets before hitting the same blocking site, it does not avoid it.
+
+**`nix run .#test` hangs the same way, for the same reason, on this
+platform.** Both commands execute `run-tests.lisp` on the host: `nix run`
+builds the runner app and then runs it outside the Nix build sandbox, so
+`scripts/bootstrap.lisp` finds this developer's sibling nerima-lisp
+checkouts and materializes all of them into the registry before the same
+stall occurs. `nix flake check` (and the other `nix build .#...` checks)
+instead run the same `run-tests.lisp` *inside* the sandbox, where those
+sibling checkouts are absent; bootstrap discovers nothing extra to
+register, and the run completes. That is exactly why `nix flake check`
+passes on this platform while `nix run .#test` hangs. Treat both the direct
+SBCL invocation and `nix run .#test` as unusable on macOS/aarch64 until SBCL
+resolves the underlying issue; `nix flake check` remains the canonical
+gate.
 
 ## Before opening a change
 
