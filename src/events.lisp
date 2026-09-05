@@ -202,9 +202,6 @@ operation names.  No labels are synthesized from condition text."))
   (check-type metrics resilience-metrics)
   (%resilience-metrics-handler-function metrics))
 
-(defun %make-resilience-metrics-handler (metrics)
-  (resilience-metrics-handler metrics))
-
 (defclass resilience-observer ()
   ((handlers
     :initarg :handlers
@@ -222,10 +219,6 @@ operation names.  No labels are synthesized from condition text."))
 
 (defun resilience-observer-p (object)
   (typep object 'resilience-observer))
-
-(defun %resilience-observer-handlers (observer)
-  (check-type observer resilience-observer)
-  (slot-value observer 'handlers))
 
 (defun %call-resilience-observer-handlers (handlers event)
   (dolist (handler handlers)

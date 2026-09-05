@@ -131,9 +131,7 @@
            ,expected))
 
 (defmacro expect-retry-exhausted-form (form)
-  `(let ((condition (expect-condition-form ,form 'retry-exhausted)))
-     (expect (typep condition 'retry-exhausted) :to-be-truthy)
-     condition))
+  `(expect-condition-form ,form 'retry-exhausted))
 
 (defmacro expect-test-retry-exhausted
     ((fixture policy thunk &rest args))

@@ -19,15 +19,6 @@
   (and record
        (> (%lease-record-expires-at record) now)))
 
-(defun %lease-record-owned-by-p (record owner)
-  (and record
-       (equal (%lease-record-owner record) owner)))
-
-(defun %lease-record-owned-by-lease-p (record lease)
-  (and (%lease-record-owned-by-p record (resilience-lease-owner lease))
-       (eql (%lease-record-fencing-token record)
-            (resilience-lease-fencing-token lease))))
-
 (defun %lease-record-matches-values-p (record owner fencing-token now)
   (and (%lease-record-held-p record now)
        (equal (%lease-record-owner record) owner)
@@ -39,23 +30,6 @@
 
 (defun %lease-record-retry-after (record now)
   (max 0d0 (- (%lease-record-expires-at record) now)))
-
-(defun %memory-lease-next-fencing-token (store key)
-  (let ((next (1+ (gethash key
-                           (%memory-lease-store-next-fencing-token store)
-                           0))))
-    (setf (gethash key (%memory-lease-store-next-fencing-token store))
-          next)
-    next))
-
-(defun %memory-lease-fencing-token (store key current owner now)
-  (if (and (%lease-record-held-p current now)
-           (%lease-record-owned-by-p current owner))
-      (%lease-record-fencing-token current)
-      (%memory-lease-next-fencing-token store key)))
-
-(defun %memory-lease-expires-at (now ttl)
-  (+ now (float ttl 1d0)))
 
 (defun %make-resilience-lease (store key owner fencing-token expires-at ttl)
   (make-instance 'resilience-lease

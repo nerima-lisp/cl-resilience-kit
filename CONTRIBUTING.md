@@ -67,16 +67,9 @@ This path has real preconditions:
   checkouts at `../<name>/` next to this repository, or from a ghq
   bare-clone layout (`<name>.git/` three directories up), materializing
   missing sibling sources into a temporary tree for the direct run.
-- **This path currently hangs on macOS/aarch64 with SBCL 2.6.0**, for both
-  `run-tests.lisp` and `run-coverage.lisp`. The hang is not caused by
-  anything in this repository: a bare `require :asdf` plus a list of the
-  same directories reproduces the stall with no project code loaded. SBCL's
-  garbage collector worker threads park in `semaphore_wait_trap` and make no
-  further progress. The cause is unresolved at the SBCL level, and there is
-  no known workaround — enlarging SBCL's heap only changes how far the run
-  gets before hitting the same blocking site, it does not avoid it. `nix
-  flake check` remains the canonical gate; treat the direct SBCL invocation
-  as unusable on this platform until SBCL resolves the underlying issue.
+- On macOS/aarch64 with SBCL 2.6.0, the direct test and coverage paths may
+  hang before project code loads. If that occurs, use `nix flake check`, the
+  supported path for repository checks.
 
 ## Before opening a change
 

@@ -144,4 +144,8 @@
   (it-fuzz "runs resilience input contracts through generated values"
       ((value (gen-integer :min -4 :max 4)))
       (:trials 8 :timeout-per-trial 1)
-    (expect value :to-be-type-of 'integer)))
+    (multiple-value-bind (tag result)
+        (call-with-resilience
+         (lambda () (values :accepted (1+ value))))
+      (expect tag :to-be :accepted)
+      (expect result :to-be (1+ value)))))

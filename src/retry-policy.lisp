@@ -1,8 +1,5 @@
 (in-package #:resilience-kit)
 
-(defparameter +make-retry-decision-option-keys+
-  '(:retry-p :delay-hint :reason))
-
 (defstruct (retry-decision
              (:constructor %make-retry-decision (retry-p delay-hint reason))
              (:predicate retry-decision-p))

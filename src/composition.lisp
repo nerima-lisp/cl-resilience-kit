@@ -454,31 +454,6 @@ dropped by the macroexpansion-time fast path."
    :idempotency-key idempotency-key
    :idempotency-fingerprint idempotency-fingerprint))
 
-(defun %make-resilience-plan-from-options (thunk options)
-  "Build a resilience plan from the keyword plist OPTIONS."
-  (multiple-value-call
-      (lambda (retry-policy circuit-breaker distributed-circuit-breaker
-               bulkhead bulkhead-timeout rate-limiter rate-limit-tokens
-               rate-limit-wait-p rate-limit-max-wait
-               rate-limit-signal-on-reject-p overall-timeout overall-deadline
-               per-attempt-timeout clock monotonic-units-per-second sleeper
-               operation retry-budget cancellation-token event-handler fallback
-               context metrics observer lifecycle executor executor-timeout
-               hard-timeout hedge-after max-hedge-attempts hedge-safe-p
-               request-coalescer idempotency-key idempotency-fingerprint)
-        (%make-resilience-plan*
-         thunk
-         retry-policy circuit-breaker distributed-circuit-breaker
-         bulkhead bulkhead-timeout rate-limiter rate-limit-tokens
-         rate-limit-wait-p rate-limit-max-wait rate-limit-signal-on-reject-p
-         overall-timeout overall-deadline per-attempt-timeout clock
-         monotonic-units-per-second sleeper operation retry-budget
-         cancellation-token event-handler fallback context metrics observer
-         lifecycle executor executor-timeout hard-timeout hedge-after
-         max-hedge-attempts hedge-safe-p request-coalescer idempotency-key
-         idempotency-fingerprint))
-    (%parse-resilience-options options)))
-
 (defun %call-with-resilience/k-from-options
     (thunk on-success on-error options)
   (multiple-value-call

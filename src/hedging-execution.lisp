@@ -19,38 +19,6 @@
   (when cancellation-token
     (check-cancellation-token cancellation-token)))
 
-(defun %submit-hedge-promise
-    (thunk &key executor hard-timeout operation cancellation-token
-             clock monotonic-units-per-second)
-  (%check-hedging-cancellation-token cancellation-token)
-  (%submit-resilience-promise
-   thunk
-   :executor executor
-   :hard-timeout hard-timeout
-   :operation operation
-   :clock clock
-   :monotonic-units-per-second
-   monotonic-units-per-second))
-
-(defun %call-single-hedge-attempt
-    (thunk &key executor hard-timeout operation clock monotonic-units-per-second)
-  (if executor
-      (%await-resilience-promise
-       (%submit-resilience-promise
-        thunk
-        :executor executor
-        :hard-timeout hard-timeout
-        :operation operation
-        :clock clock
-        :monotonic-units-per-second
-        monotonic-units-per-second)
-       nil)
-      (%run-with-hard-timeout
-       thunk hard-timeout operation :thread
-       :clock clock
-       :monotonic-units-per-second
-       monotonic-units-per-second)))
-
 (defun %await-primary-hedge-window (promise hedge-after)
   (handler-case
       (values (%await-resilience-promise promise hedge-after) nil t)

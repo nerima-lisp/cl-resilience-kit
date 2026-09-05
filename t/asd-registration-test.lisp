@@ -1,24 +1,8 @@
 (in-package #:resilience-kit/test)
 
-;;; FR-005: t/runner.lisp:6-7 only errors when the selected test plan is
-;;; COMPLETELY empty, so a file that sits in t/ but was never added to any
-;;; system's :components list compiles, runs, and reports nothing -- and
-;;; nothing else notices. This test closes that gap by asking ASDF itself,
-;;; not a reimplementation of it, which source files it has registered
-;;; across every test system rooted at t/, and comparing that set against
-;;; what is physically on disk.
-;;;
-;;; A file may be registered in any one of the three test systems below
-;;; (they all share :pathname "t"), so the check takes the union across all
-;;; three rather than checking a single system.
-;;;
-;;; The reverse direction -- every registered component exists on disk -- is
-;;; deliberately not asserted here. cl-resilience-kit/all-test depends on
-;;; all three systems, and run-tests.lisp targets all-test, so ASDF's own
-;;; component resolution already fails loudly (a file-error during load-op)
-;;; for any registered-but-missing file before this test could ever run.
-;;; Asserting it here would be an untestable branch: nothing on this entry
-;;; point could make it fail.
+;;; Compare ASDF's registered test components with files on disk. The runner
+;;; rejects only an entirely empty plan, so an unregistered test can otherwise
+;;; disappear silently; the union covers all test systems rooted at t/.
 
 (defparameter +t-directory-check-systems+
   '("cl-resilience-kit/test"

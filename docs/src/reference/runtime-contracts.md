@@ -1,7 +1,7 @@
 # Runtime contracts
 
-This page describes the current v2 runtime contract.  The v2 API is the only
-supported contract; integrations should depend on the exported symbols and
+This page describes the current runtime contract. The documented API is the
+only supported contract; integrations should depend on exported symbols and
 the explicit boundaries described here.
 
 ## Common Lisp systems

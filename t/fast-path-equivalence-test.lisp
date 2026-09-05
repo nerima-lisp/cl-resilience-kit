@@ -1,15 +1,8 @@
 (in-package #:resilience-kit/test)
 
-;;; CALL-WITH-RESILIENCE has a compiler macro that, for literal keyword
-;;; options known at macroexpansion time, expands directly to one of the
-;;; "-direct" dispatch functions instead of going through the runtime
-;;; option parser and %CALL-WITH-RESILIENCE-DISPATCH-MODE.  That runtime
-;;; dispatcher additionally consults *RESILIENCE-EVENT-HANDLER*, so a call
-;;; made through APPLY (or any other non-literal call the compiler macro
-;;; cannot see) can select a different dispatch mode than the same options
-;;; written literally in source position.  These tests hold the two paths
-;;; to the same observable contract: same returned values, same ordered
-;;; event-type sequence, and the same condition on failure.
+;;; Literal options use compiler-macro fast paths while APPLY uses the
+;;; generic dispatcher. These tests keep both paths aligned on values,
+;;; event order, and failure conditions.
 
 (defun %make-event-log ()
   "Return a fresh mutable box for collecting event types in call order."

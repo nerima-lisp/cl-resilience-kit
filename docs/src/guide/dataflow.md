@@ -10,11 +10,11 @@ the same resilience policies used by the rest of the library:
 (in-package #:resilience-dataflow)
 ```
 
-The optional system is intended to track the verified Nerima Lisp
-`cl-dataflow-kit` release line. In this repository, that means `v1.1.1`.
+The optional system requires `cl-dataflow-kit` version `1.1.1` or newer
+through ASDF. The Nix development environment currently pins `v1.2.0`.
 
-Load the ASDF system by its `cl-...` name, then use the Nerima Lisp package
-names in code: `resilience-kit` for the core API and `resilience-dataflow`
+Use the Nerima Lisp package names in code: `resilience-kit` for the core API and
+`resilience-dataflow`
 for the integration layer. `cl-resilience-kit` and `cl-resilience-kit/dataflow`
 remain available as compatibility nicknames. `resilience-dataflow`
 re-exports the direct `cl-dataflow-kit` entry points (`define-pipeline`,
