@@ -74,11 +74,6 @@
 (defun retry-policy-random-source (policy)
   (%retry-policy-random-source policy))
 
-(defun %function-or-nil (value name)
-  (when (and value (not (functionp value)))
-    (error "~A must be a function or NIL, got ~S." name value))
-  value)
-
 (defmacro %ensure-retry-policy-option (test format-control value)
   `(unless ,test
      (error ,format-control ,value)))

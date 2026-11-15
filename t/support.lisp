@@ -4,38 +4,36 @@
 
 (defstruct (test-fixture
             (:constructor %make-test-fixture
-                (clock random-source sleeper sleeps)))
+                (clock random-source sleeper sleeps now)))
   clock
   random-source
   sleeper
-  sleeps)
+  sleeps
+  now)
 
 (defun make-test-fixture (&key (start 0) (random-values '(500000)))
-  "Return fake boundary objects and a sleeper that advances the fake clock."
-  (let* ((clock (make-fake-clock
-                 :start start
-                 :monotonic-start start))
-         (fixture (%make-test-fixture
-                   clock
-                   (make-test-random-source
-                    :values random-values)
-                   nil
-                   nil)))
-    (setf (test-fixture-sleeper fixture)
-          (make-sleeper
-           :sleep-fn
-           (lambda (seconds)
-             (push seconds (test-fixture-sleeps fixture))
-             (advance-fake-clock clock seconds))))
+  "Return injected functions and a sleeper that advances the fixture time."
+  (let ((fixture (%make-test-fixture nil nil nil nil start))
+        (samples (copy-list random-values)))
+    (setf (test-fixture-clock fixture)
+          (lambda () (test-fixture-now fixture))
+          (test-fixture-random-source fixture)
+          (lambda (limit)
+            (declare (ignore limit))
+            (unless samples
+              (error "The fixture random samples are exhausted."))
+            (pop samples))
+          (test-fixture-sleeper fixture)
+          (lambda (seconds)
+            (push seconds (test-fixture-sleeps fixture))
+            (incf (test-fixture-now fixture) seconds)))
     fixture))
 
 (defun fixture-sleeps (fixture)
   (reverse (test-fixture-sleeps fixture)))
 
 (defun advance-fixture (fixture seconds)
-  (advance-fake-clock
-   (test-fixture-clock fixture)
-   seconds))
+  (incf (test-fixture-now fixture) seconds))
 
 (defun approximately-equal-p (left right &optional (epsilon 1d-9))
   (<= (abs (- (coerce left 'double-float)

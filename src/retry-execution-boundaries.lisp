@@ -144,7 +144,7 @@
      clock units)
     (%check-active-cancellation-token)
     (when (> delay 0d0)
-      (%sleep sleeper delay))
+      (funcall sleeper delay))
     (%check-active-cancellation-token)
     delay))
 

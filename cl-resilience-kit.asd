@@ -2,7 +2,7 @@
 
 (asdf:defsystem "cl-resilience-kit"
   :description "Composable resilience primitives for Common Lisp."
-  :long-description "Retry, deadline, circuit-breaker, bulkhead, and rate-limiter primitives built on Nerima Lisp packages and injectable boundary objects."
+  :long-description "Retry, deadline, circuit-breaker, bulkhead, and rate-limiter primitives built on Nerima Lisp packages and injectable clock, sleeper, and random-source functions."
   :version "2.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
@@ -120,7 +120,6 @@
   :pathname "t"
   :serial t
   :components ((:file "package")
-               (:file "boundary-support")
                (:file "support")
                (:file "boundary-protocol-test")
                (:file "runner")

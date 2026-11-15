@@ -40,8 +40,8 @@
 
 The fixed nesting order is BULKHEAD (the complete logical operation) -> RETRY
 (the attempt loop) -> RATE-LIMITER (each attempt) -> CIRCUIT-BREAKER (each
-attempt) -> THUNK.  The supplied clock, unit scale, and sleeper should be the
-same boundary objects used by the configured primitives when a deterministic
+attempt) -> THUNK. The supplied clock and sleeper functions and unit scale
+should match those used by the configured primitives when a deterministic
 composition is required.
 
 When RATE-LIMITER is present, rejection signals RATE-LIMIT-EXCEEDED by

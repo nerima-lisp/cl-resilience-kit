@@ -154,7 +154,7 @@ must advance the injected clock if a test wants to observe successful waiting."
                  signal-on-reject-p active-handler clock units observed-at)))
              (when active-token
                (%check-cancellation-token active-token))
-             (%sleep sleeper retry-after)
+             (funcall sleeper retry-after)
              (when active-token
                (%check-cancellation-token active-token))
              (let ((after (%monotonic-seconds clock units)))

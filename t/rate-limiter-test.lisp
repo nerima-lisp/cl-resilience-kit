@@ -75,13 +75,12 @@
                                :capacity 1
                                :initial-tokens 0
                                :refill-rate 1
-                               :sleeper (make-sleeper
-                                         :sleep-fn (lambda (seconds)
-                                                     (push seconds sleeps))))
-      (multiple-value-bind (acquired-p retry-after)
-          (rate-limiter-acquire limiter :wait-p t)
-        (expect acquired-p :to-be nil)
-        (expect retry-after :to-be 1.0d0)
+                               :sleeper (lambda (seconds)
+                                          (push seconds sleeps)))
+        (multiple-value-bind (acquired-p retry-after)
+            (rate-limiter-acquire limiter :wait-p t)
+          (expect acquired-p :to-be nil)
+          (expect retry-after :to-be 1.0d0)
           (expect sleeps :to-equal '(1.0d0))))))
 
   (it "cancels a waiting acquisition through its cooperative token"
@@ -90,12 +89,11 @@
                                :capacity 1
                                :initial-tokens 0
                                :refill-rate 1
-                               :sleeper (make-sleeper
-                                         :sleep-fn (lambda (seconds)
-                                                     (declare (ignore seconds))
-                                                     (cancel-cancellation-token
-                                                      token
-                                                      :stop-waiting))))
+                               :sleeper (lambda (seconds)
+                                          (declare (ignore seconds))
+                                          (cancel-cancellation-token
+                                           token
+                                           :stop-waiting)))
         (let ((caught (expect-condition
                        (lambda ()
                          (rate-limiter-acquire
@@ -123,9 +121,7 @@
              :capacity 2
              :refill-rate 0.5d0
              :initial-tokens 1
-             :clock (make-fake-clock
-                     :start 7
-                     :monotonic-start 7)
+             :clock (lambda () 7)
              :monotonic-units-per-second 1)))
       (expect
        (approximately-equal-p
@@ -188,11 +184,9 @@
                              :initial-tokens 0
                              :refill-rate 4
                              :sleeper
-                             (make-sleeper
-                              :sleep-fn
-                              (lambda (seconds)
-                                (declare (ignore seconds))
-                                (advance-fixture fixture 1d0))))
+                             (lambda (seconds)
+                               (declare (ignore seconds))
+                               (advance-fixture fixture 1d0)))
       (let ((caught
               (expect-condition
                (lambda ()

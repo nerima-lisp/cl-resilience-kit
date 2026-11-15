@@ -9,11 +9,8 @@
                   (/ (get-internal-real-time) internal-time-units-per-second))
               :to-be t)))
 
-  (it "uses CL:SLEEP for the default sleeper and preserves requested seconds"
-    (expect (resilience-kit::%active-sleeper nil) :to-be #'sleep)
-    (expect (resilience-kit::%sleep
-             (resilience-kit::%active-sleeper nil) 0)
-            :to-be 0))
+  (it "uses CL:SLEEP for the default sleeper"
+    (expect (resilience-kit::%active-sleeper nil) :to-be #'sleep))
 
   (it "normalizes an injected clock and invokes an injected sleeper"
     (let ((now 20)
@@ -48,28 +45,58 @@
       (expect (eq (resilience-kit:retry-policy-random-source first)
                   (resilience-kit:retry-policy-random-source second))
               :to-be nil)
-      (dotimes (index 10)
-        (declare (ignore index))
-        (let ((delay (compute-backoff-delay first 1)))
-          (expect (<= 0d0 delay) :to-be t)
-          (expect (< delay 1d0) :to-be t)))
+      (loop repeat 10
+            do (let ((delay (compute-backoff-delay first 1)))
+                 (expect (<= 0d0 delay) :to-be t)
+                 (expect (< delay 1d0) :to-be t)))
       (expect (random 1000000 *random-state*)
               :to-be (random 1000000 state))))
 
-  (it "advances fake time and consumes deterministic samples without fallback"
-    (let* ((clock (make-fake-clock :monotonic-start 7))
-           (source (make-test-random-source :values '(0 999999)))
+  (it "advances injected time and consumes deterministic samples without fallback"
+    (let* ((now 7)
+           (samples '(0 999999))
+           (clock (lambda () now))
            (policy (make-retry-policy
-                    :initial-delay 1 :jitter :full :random-source source)))
+                    :initial-delay 1 :jitter :full
+                    :random-source (lambda (limit)
+                                     (declare (ignore limit))
+                                     (unless samples
+                                       (error "The random samples are exhausted."))
+                                     (pop samples)))))
       (expect (funcall clock) :to-be 7)
-      (advance-fake-clock clock 2)
+      (incf now 2)
       (expect (funcall clock) :to-be 9)
       (expect (compute-backoff-delay policy 1) :to-be 0d0)
       (expect (compute-backoff-delay policy 1) :to-be 0.999999d0)
       (expect-condition-form (compute-backoff-delay policy 1) 'error)))
 
-  (it "rejects non-callable injected effect objects"
+  (it "rejects non-function effect objects and function-name symbols"
     (expect-error-forms
       (make-rate-limiter :clock (list :old-clock))
+      (make-rate-limiter :clock 'get-internal-real-time)
       (make-rate-limiter :sleeper (list :old-sleeper))
-      (make-retry-policy :random-source (list :old-random-source)))))
+      (make-rate-limiter :sleeper 'sleep)
+      (make-retry-policy :random-source (list :old-random-source))
+      (make-retry-policy :random-source 'random)))
+
+  (it "names invalid clock and sleeper options in validation errors"
+    (let ((clock-error (expect-condition-form
+                       (make-rate-limiter :clock 'get-internal-real-time) 'error))
+          (sleeper-error (expect-condition-form
+                         (make-rate-limiter :sleeper 'sleep) 'error)))
+      (expect (princ-to-string clock-error)
+              :to-contain "CLOCK must be a function or NIL")
+      (expect (princ-to-string sleeper-error)
+              :to-contain "SLEEPER must be a function or NIL")))
+
+  (it "validates the sleeper before the single-attempt retry fast path"
+    (let ((calls 0))
+      (let ((condition
+              (expect-condition-form
+               (call-with-retry (make-retry-policy :max-attempts 1)
+                                (lambda () (incf calls))
+                                :sleeper 'sleep)
+               'error)))
+        (expect calls :to-be 0)
+        (expect (princ-to-string condition)
+                :to-contain "SLEEPER must be a function or NIL")))))

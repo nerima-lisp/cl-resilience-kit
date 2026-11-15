@@ -97,10 +97,13 @@
     (error "~A must be a positive real, got ~S." name value))
   (float value 1d0))
 
+(defun %function-or-nil (value name)
+  (when (and value (not (functionp value)))
+    (error "~A must be a function or NIL, got ~S." name value))
+  value)
+
 (defun %active-clock (clock)
-  (let ((active (or clock *resilience-clock* +default-clock+)))
-    (check-type active function)
-    active))
+  (%function-or-nil (or clock *resilience-clock* +default-clock+) "CLOCK"))
 
 (defun %active-monotonic-units-per-second (units)
   (%ensure-positive-real
@@ -120,19 +123,10 @@
     (%monotonic-seconds active-clock units)))
 
 (defun %active-sleeper (sleeper)
-  (let ((active (or sleeper +default-sleeper+)))
-    (check-type active function)
-    active))
-
-(defun %sleep (sleeper seconds)
-  (funcall sleeper seconds)
-  seconds)
+  (%function-or-nil (or sleeper +default-sleeper+) "SLEEPER"))
 
 (defun %active-random-source (random-source)
-  (if random-source
-      (progn
-        (check-type random-source function)
-        random-source)
+  (or (%function-or-nil random-source "RANDOM-SOURCE")
       (let ((state (make-random-state t)))
         (lambda (limit)
           (random limit state)))))

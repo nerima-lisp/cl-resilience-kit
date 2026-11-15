@@ -62,7 +62,9 @@ sleepers, `cl-weave` property/concurrency contracts, and continuation-aware
 fixtures. Integrations should use injected functions instead of relying on
 wall-clock sleeps or process-global state. Since 2.0.0, clocks,
 sleepers, and random sources are functions rather than `cl-boundary-kit`
-objects. A clock takes no arguments and returns values in its configured
+objects. Only function objects are accepted; function-name symbols are
+rejected. `NIL` selects the inherited or default function.
+A clock takes no arguments and returns values in its configured
 unit scale; a sleeper receives seconds; a random source receives an integer
 limit and returns an integer in `[0, limit)`. The defaults are
 `get-internal-real-time`, `sleep`, and `random` with a private random state

@@ -76,6 +76,10 @@ Version 2.0.0 removes the core dependency on `cl-boundary-kit`. The public
 `:clock`, `:sleeper`, and `:random-source` keywords remain, but they now accept
 Common Lisp functions instead of `cl-boundary-kit` objects:
 
+Pass function objects such as `#'sleep` or lambda expressions. Function-name
+symbols such as `'sleep` are rejected. `NIL` selects the inherited or default
+function.
+
 | Keyword | Function contract | Default |
 | --- | --- | --- |
 | `:clock` | No arguments; returns time in the units selected by `:monotonic-units-per-second` | `#'get-internal-real-time`, with `internal-time-units-per-second` |
@@ -87,7 +91,7 @@ and `(cl-boundary-kit:make-sleeper :sleep-fn callback)` with `callback`.
 For a private random state, capture the state in a function:
 
 ```common-lisp
-(let ((state (make-random-state nil)))
+(let ((state (make-random-state t)))
   (resilience-kit:make-retry-policy
    :initial-delay 1 :jitter :full
    :random-source (lambda (limit) (random limit state))))
@@ -96,6 +100,12 @@ For a private random state, capture the state in a function:
 Keep the clock's unit scale consistent with `:monotonic-units-per-second`.
 The default clock has the same platform-dependent monotonicity as SBCL's
 `get-internal-real-time`.
+
+The public readers `retry-policy-random-source`, `circuit-breaker-clock`,
+`distributed-circuit-breaker-clock`, `rate-limiter-clock`, and
+`rate-limiter-sleeper` also return function objects instead of
+`cl-boundary-kit` objects. Invoke their results with `funcall` using the
+corresponding contract above.
 
 Loading the core system does not load either optional integration.
 Explicitly loading `cl-resilience-kit/observability` also loads

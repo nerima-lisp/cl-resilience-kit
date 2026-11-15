@@ -77,9 +77,6 @@
                (lambda (name)
                  (let ((adjacent-directory (%adjacent-system-directory name root)))
                    (cond
-                     ;; Keep explicit ASDF registries ahead of local checkouts.
-                     ((asdf:find-system name nil)
-                      nil)
                      ((uiop:directory-exists-p adjacent-directory)
                       adjacent-directory)
                      (t

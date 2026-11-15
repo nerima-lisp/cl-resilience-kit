@@ -149,6 +149,7 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
           (%ensure-non-negative-real per-attempt-timeout
                                      "PER-ATTEMPT-TIMEOUT")))
   (let* ((active-clock (%active-clock clock))
+         (active-sleeper (%active-sleeper sleeper))
          (units (%active-monotonic-units-per-second
                  monotonic-units-per-second))
          (active-token (%active-cancellation-token cancellation-token))
@@ -174,8 +175,7 @@ explicitly opt in through a policy made with RETRY-SAFE-P."
         (%call-with-retry-single-pass
          thunk per-attempt-timeout operation active-clock units
          effective-deadline active-token)
-        (let ((active-sleeper (%active-sleeper sleeper))
-              (*resilience-clock* active-clock)
+        (let ((*resilience-clock* active-clock)
               (*resilience-monotonic-units-per-second* units)
               (*resilience-deadline* effective-deadline)
               (*resilience-cancellation-token* active-token)
