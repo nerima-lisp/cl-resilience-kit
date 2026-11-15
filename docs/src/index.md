@@ -1,8 +1,8 @@
 # cl-resilience-kit
 
 cl-resilience-kit is a set of composable resilience primitives for Common
-Lisp. It builds on the Nerima Lisp packages `cl-boundary-kit`,
-`cl-concurrent-kit`, and `cl-date-kit` while avoiding assumptions about a
+Lisp. It builds on the Nerima Lisp packages `cl-concurrent-kit` and
+`cl-date-kit` while avoiding assumptions about a
 particular web framework, RPC protocol, storage backend, or application
 lifecycle.
 

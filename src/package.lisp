@@ -1,13 +1,6 @@
 (defpackage #:resilience-kit
   (:nicknames #:cl-resilience-kit)
   (:use #:cl)
-  (:import-from #:cl-boundary-kit
-                #:clock-monotonic
-                #:make-clock
-                #:make-random-source
-                #:make-sleeper
-                #:random-source-random
-                #:sleeper-sleep)
   (:import-from #:cl-date-kit
                 #:duration-of-seconds)
   (:import-from #:cl-concurrent-kit

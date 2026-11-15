@@ -3,8 +3,8 @@
 `cl-resilience-kit` provides composable resilience primitives for Common Lisp
 operations that can fail transiently: service calls, database access, queues,
 filesystem operations, and other application boundaries. It builds directly on
-the Nerima Lisp packages `cl-boundary-kit`, `cl-concurrent-kit`, and
-`cl-date-kit`, while staying independent of any specific HTTP, PostgreSQL,
+the Nerima Lisp packages `cl-concurrent-kit` and `cl-date-kit`, while
+staying independent of any specific HTTP, PostgreSQL,
 Redis, or other protocol package.
 
 The full guide is available at
@@ -54,9 +54,9 @@ Make the repository available to ASDF's source registry, then load:
 (asdf:load-system :cl-resilience-kit)
 ```
 
-The production system uses the Nerima Lisp packages `cl-boundary-kit` for
-injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
-for executor timing. The optional `cl-resilience-kit/observability` system
+The production system uses `cl-concurrent-kit` 0.7.0 or newer for
+synchronization and `cl-date-kit` for executor timing. Clocks, sleepers, and
+random sources use local callable protocols. The optional `cl-resilience-kit/observability` system
 adds direct `cl-observability-kit` metrics, and the optional
 `cl-resilience-kit/dataflow` system keeps the Nerima Lisp `cl-dataflow` API
 available from `resilience-dataflow` while adding the same resilience controls
@@ -69,6 +69,39 @@ Load the ASDF systems by their `cl-...` names, then use the Nerima Lisp
 package names in code: `resilience-kit`, `resilience-observability`, and
 `resilience-dataflow`. The `cl-...` forms remain available as compatibility
 nicknames.
+
+### Migrating from 1.x
+
+Version 2.0.0 removes the core dependency on `cl-boundary-kit`. The public
+`:clock`, `:sleeper`, and `:random-source` keywords remain, but they now accept
+Common Lisp functions instead of `cl-boundary-kit` objects:
+
+| Keyword | Function contract | Default |
+| --- | --- | --- |
+| `:clock` | No arguments; returns time in the units selected by `:monotonic-units-per-second` | `#'get-internal-real-time`, with `internal-time-units-per-second` |
+| `:sleeper` | Receives a non-negative number of seconds | `#'sleep` |
+| `:random-source` | Receives a positive integer limit; returns an integer from zero, inclusive, to the limit, exclusive | A closure over a fresh private `random-state` for each policy |
+
+Replace `(cl-boundary-kit:make-clock :monotonic-fn callback)` with `callback`,
+and `(cl-boundary-kit:make-sleeper :sleep-fn callback)` with `callback`.
+For a private random state, capture the state in a function:
+
+```common-lisp
+(let ((state (make-random-state nil)))
+  (resilience-kit:make-retry-policy
+   :initial-delay 1 :jitter :full
+   :random-source (lambda (limit) (random limit state))))
+```
+
+Keep the clock's unit scale consistent with `:monotonic-units-per-second`.
+The default clock has the same platform-dependent monotonicity as SBCL's
+`get-internal-real-time`.
+
+Loading the core system does not load either optional integration.
+Explicitly loading `cl-resilience-kit/observability` also loads
+`cl-boundary-kit` through `cl-observability-kit`; explicitly loading
+`cl-resilience-kit/dataflow` loads `cl-dataflow-kit`. The full test suite
+loads both integrations.
 
 ```common-lisp
 (asdf:load-system :cl-resilience-kit)

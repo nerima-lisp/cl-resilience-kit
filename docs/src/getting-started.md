@@ -10,9 +10,9 @@ Make the repository available to ASDF's source registry, then load the system:
 (asdf:load-system :cl-resilience-kit)
 ```
 
-The production system uses the Nerima Lisp packages `cl-boundary-kit` for
-injectable effects, `cl-concurrent-kit` for synchronization, and `cl-date-kit`
-for executor timing. The optional `cl-resilience-kit/observability` system
+The production system uses `cl-concurrent-kit` for synchronization and
+`cl-date-kit` for executor timing. Clock, sleeper, and random-source injection
+uses Common Lisp functions. The optional `cl-resilience-kit/observability` system
 adds direct `cl-observability-kit` metrics, and the optional
 `cl-resilience-kit/dataflow` system wraps `cl-dataflow-kit` pipeline handlers with
 the same resilience contracts; the test system alone uses `cl-weave`.
@@ -77,9 +77,11 @@ conditions and results only when `:retry-safe-p` is true.
 
 Use injected boundaries when reproducibility or integration control matters:
 
-- `:clock` and `:monotonic-units-per-second` for monotonic time;
-- `:random-source` for jitter;
-- `:sleeper` for backoff waits;
+- `:clock`, a zero-argument time function, and `:monotonic-units-per-second`
+  for its unit scale;
+- `:random-source`, a function receiving an integer limit and returning an
+  integer in `[0, limit)`, for jitter;
+- `:sleeper`, a function receiving seconds, for backoff waits;
 - `:cancellation-token` for cooperative cancellation;
 - `:event-handler` or a `resilience-observer` for telemetry;
 - a state store and optional lease store for distributed coordination.

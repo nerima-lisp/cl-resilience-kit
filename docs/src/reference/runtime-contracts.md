@@ -10,15 +10,17 @@ The library is distributed as the ASDF system `cl-resilience-kit`.
 
 Its runtime dependencies are versioned directly in the system definition:
 
-- `cl-boundary-kit` 2.3.0 or newer;
-- `cl-concurrent-kit` 0.6.1 or newer;
+- `cl-concurrent-kit` 0.7.0 or newer;
 - `cl-date-kit` 1.0.0 or newer.
 
 The optional `cl-resilience-kit/observability` system adds direct metrics
 integration with `cl-observability-kit`, and the optional
 `cl-resilience-kit/dataflow` system adds direct pipeline integration with
 `cl-dataflow-kit`. The test system additionally uses `cl-weave`; the production
-system does not load the test framework.
+system does not load the test framework or either optional integration.
+The observability integration retains `cl-boundary-kit` as a transitive
+dependency of `cl-observability-kit`. The full test suite loads both optional
+integrations and their dependencies.
 
 ## Flake systems
 
@@ -57,5 +59,11 @@ side effects remain visible to the caller.
 
 The test suite uses fake monotonic time, injected random sources, recording
 sleepers, `cl-weave` property/concurrency contracts, and continuation-aware
-fixtures.  Integrations should use the same boundary objects instead of
-relying on wall-clock sleeps or process-global state.
+fixtures. Integrations should use injected functions instead of relying on
+wall-clock sleeps or process-global state. Since 2.0.0, clocks,
+sleepers, and random sources are functions rather than `cl-boundary-kit`
+objects. A clock takes no arguments and returns values in its configured
+unit scale; a sleeper receives seconds; a random source receives an integer
+limit and returns an integer in `[0, limit)`. The defaults are
+`get-internal-real-time`, `sleep`, and `random` with a private random state
+per retry policy. Default clock monotonicity depends on SBCL and the platform.

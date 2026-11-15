@@ -29,20 +29,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Main-system dependencies. This project uses the boundary package for
-    # clocks, random sources, and sleepers, and date-kit for executor timing.
-    cl-boundary-kit = {
-      url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.cl-weave.follows = "cl-weave";
-      inputs.cl-nix-forge.follows = "cl-nix-forge";
-      inputs.treefmt-nix.follows = "treefmt-nix";
-    };
-
+    # Main-system dependencies. Effects use local callable protocols;
+    # date-kit supplies executor timing and concurrent-kit synchronization.
     cl-concurrent-kit = {
-      url = "github:nerima-lisp/cl-concurrent-kit/v0.6.1";
+      url = "github:nerima-lisp/cl-concurrent-kit/v0.7.0";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.cl-boundary-kit.follows = "cl-boundary-kit";
       inputs.cl-date-kit.follows = "cl-date-kit";
       inputs.cl-nix-forge.follows = "cl-nix-forge";
       inputs.treefmt-nix.follows = "treefmt-nix";
@@ -76,7 +67,6 @@
       inputs.cl-nix-forge.follows = "cl-nix-forge";
       inputs.cl-concurrent-kit.follows = "cl-concurrent-kit";
       inputs.cl-date-kit.follows = "cl-date-kit";
-      inputs.cl-boundary-kit.follows = "cl-boundary-kit";
       inputs.cl-weave.follows = "cl-weave";
       inputs.treefmt-nix.follows = "treefmt-nix";
     };
@@ -93,7 +83,6 @@
       nixpkgs,
       cl-nix-forge,
       cl-weave,
-      cl-boundary-kit,
       cl-concurrent-kit,
       cl-date-kit,
       cl-prolog-kit,
@@ -152,7 +141,6 @@
       killAfterSeconds = terminationGraceSeconds;
 
       lispDependencies = ctx: [
-        cl-boundary-kit.packages.${ctx.system}.cl-boundary-kit
         cl-concurrent-kit.packages.${ctx.system}.cl-concurrent-kit
         cl-date-kit.packages.${ctx.system}.cl-date-kit
       ];

@@ -1,14 +1,15 @@
 (in-package #:cl-user)
 
 (defparameter *bootstrap-nerima-systems*
-  '("cl-boundary-kit"
-    "cl-concurrent-kit"
+  '("cl-concurrent-kit"
     "cl-dataflow-kit"
     "cl-date-kit"
     "cl-host-kit"
     "cl-observability-kit"
     "cl-prolog-kit"
-    "cl-weave"))
+    "cl-weave"
+    ;; The full suite loads the optional observability integration.
+    "cl-boundary-kit"))
 
 (defun %pathname-parent (pathname levels)
   (loop
@@ -76,6 +77,9 @@
                (lambda (name)
                  (let ((adjacent-directory (%adjacent-system-directory name root)))
                    (cond
+                     ;; Keep explicit ASDF registries ahead of local checkouts.
+                     ((asdf:find-system name nil)
+                      nil)
                      ((uiop:directory-exists-p adjacent-directory)
                       adjacent-directory)
                      (t

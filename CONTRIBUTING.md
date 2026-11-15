@@ -61,9 +61,9 @@ sbcl --non-interactive --no-userinit --no-sysinit \
 
 This path has real preconditions:
 
-- It depends on the Nerima Lisp packages `cl-boundary-kit`,
-  `cl-concurrent-kit`, `cl-date-kit`, and (for the full test suite)
-  `cl-dataflow`, `cl-observability-kit`, `cl-prolog`, and `cl-weave`. None of
+- It depends on the Nerima Lisp packages `cl-concurrent-kit`, `cl-date-kit`,
+  and (for the full test suite) `cl-dataflow`, `cl-observability-kit`,
+  `cl-boundary-kit`, `cl-prolog`, and `cl-weave`. None of
   these are published on Quicklisp.
 - `scripts/bootstrap.lisp` resolves them either from adjacent nerima-lisp
   checkouts at `../<name>/` next to this repository, or from a ghq

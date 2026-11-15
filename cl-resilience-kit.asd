@@ -3,15 +3,14 @@
 (asdf:defsystem "cl-resilience-kit"
   :description "Composable resilience primitives for Common Lisp."
   :long-description "Retry, deadline, circuit-breaker, bulkhead, and rate-limiter primitives built on Nerima Lisp packages and injectable boundary objects."
-  :version "1.0.0"
+  :version "2.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
   :homepage "https://github.com/nerima-lisp/cl-resilience-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-resilience-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-resilience-kit.git")
-  :depends-on ((:version "cl-boundary-kit" "2.3.0")
-               (:version "cl-concurrent-kit" "0.6.1")
+  :depends-on ((:version "cl-concurrent-kit" "0.7.0")
                (:version "cl-date-kit" "1.0.0"))
   :pathname "src"
   :serial t
@@ -75,7 +74,7 @@
 (asdf:defsystem "cl-resilience-kit/observability"
   :description "Direct cl-observability-kit metrics for resilience events."
   :long-description "An optional metrics integration that publishes resilience event counts and durations through cl-observability-kit."
-  :version "1.0.0"
+  :version "2.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -91,7 +90,7 @@
 (asdf:defsystem "cl-resilience-kit/dataflow"
   :description "Optional cl-dataflow-kit integration for resilient pipeline stages."
   :long-description "An optional dataflow integration that wraps cl-dataflow-kit node handlers with cl-resilience-kit execution boundaries."
-  :version "1.0.0"
+  :version "2.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -109,7 +108,7 @@
 (asdf:defsystem "cl-resilience-kit/test"
   :description "Tests for cl-resilience-kit."
   :long-description "Deterministic cl-weave tests for retry, deadline, breaker, bulkhead, rate limiter, and composition semantics."
-  :version "1.0.0"
+  :version "2.0.0"
   :author "Community contributors"
   :maintainer "Community contributors"
   :license "MIT"
@@ -121,7 +120,9 @@
   :pathname "t"
   :serial t
   :components ((:file "package")
+               (:file "boundary-support")
                (:file "support")
+               (:file "boundary-protocol-test")
                (:file "runner")
                (:file "data-validation-test")
                (:file "retry-policy-test")
@@ -159,7 +160,7 @@
 
 (asdf:defsystem "cl-resilience-kit/observability-test"
   :description "Optional cl-observability-kit integration tests."
-  :version "1.0.0"
+  :version "2.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/observability")
   :pathname "t"
@@ -172,7 +173,7 @@
 
 (asdf:defsystem "cl-resilience-kit/dataflow-test"
   :description "Optional cl-dataflow-kit integration tests."
-  :version "1.0.0"
+  :version "2.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/dataflow")
   :pathname "t"
@@ -186,7 +187,7 @@
 
 (asdf:defsystem "cl-resilience-kit/all-test"
   :description "Full test suite for cl-resilience-kit, including optional integrations."
-  :version "1.0.0"
+  :version "2.0.0"
   :depends-on ("cl-resilience-kit/test"
                "cl-resilience-kit/observability-test"
                "cl-resilience-kit/dataflow-test")

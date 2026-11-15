@@ -3,15 +3,9 @@
 (defparameter +default-monotonic-units-per-second+
   (coerce internal-time-units-per-second 'double-float))
 
-(defparameter +default-clock+
-  (load-time-value
-   (cl-boundary-kit:make-clock)
-   t))
+(defparameter +default-clock+ (function get-internal-real-time))
 
-(defparameter +default-sleeper+
-  (load-time-value
-   (cl-boundary-kit:make-sleeper)
-   t))
+(defparameter +default-sleeper+ (function sleep))
 
 (defvar *resilience-clock* nil)
 (defvar *resilience-monotonic-units-per-second* nil)
@@ -104,7 +98,9 @@
   (float value 1d0))
 
 (defun %active-clock (clock)
-  (or clock *resilience-clock* +default-clock+))
+  (let ((active (or clock *resilience-clock* +default-clock+)))
+    (check-type active function)
+    active))
 
 (defun %active-monotonic-units-per-second (units)
   (%ensure-positive-real
@@ -114,7 +110,7 @@
    "MONOTONIC-UNITS-PER-SECOND"))
 
 (defun %monotonic-seconds (clock monotonic-units-per-second)
-  (/ (float (cl-boundary-kit:clock-monotonic clock) 1d0)
+  (/ (float (funcall clock) 1d0)
      (float monotonic-units-per-second 1d0)))
 
 (defun %now (&key clock monotonic-units-per-second)
@@ -124,17 +120,25 @@
     (%monotonic-seconds active-clock units)))
 
 (defun %active-sleeper (sleeper)
-  (or sleeper +default-sleeper+))
+  (let ((active (or sleeper +default-sleeper+)))
+    (check-type active function)
+    active))
 
 (defun %sleep (sleeper seconds)
-  (cl-boundary-kit:sleeper-sleep sleeper seconds))
+  (funcall sleeper seconds)
+  seconds)
 
 (defun %active-random-source (random-source)
-  (or random-source (cl-boundary-kit:make-random-source)))
+  (if random-source
+      (progn
+        (check-type random-source function)
+        random-source)
+      (let ((state (make-random-state t)))
+        (lambda (limit)
+          (random limit state)))))
 
 (defun %random-unit (random-source)
-  (/ (float (cl-boundary-kit:random-source-random random-source 1000000)
-            1d0)
+  (/ (float (funcall random-source 1000000) 1d0)
      1000000d0))
 
 (defun %effective-deadline (requested-deadline)

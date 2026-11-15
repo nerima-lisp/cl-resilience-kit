@@ -34,11 +34,6 @@
                 #:operation-timed-out-operation
                 #:signal-semaphore
                 #:wait-on-semaphore)
-  (:import-from #:cl-boundary-kit
-                #:advance-fake-clock
-                #:make-fake-clock
-                #:make-sleeper
-                #:make-test-random-source)
   (:import-from #:resilience-kit
                 #:attempt-timeout
                 #:attempt-timeout-timeout
