@@ -4,9 +4,11 @@
   (it "uses internal-time units for the default clock"
     (let ((before (get-internal-real-time))
           (observed (resilience-kit::%now)))
-      (expect (<= (/ before internal-time-units-per-second)
+      (expect (<= (/ (float before 1d0)
+                     (float internal-time-units-per-second 1d0))
                   observed
-                  (/ (get-internal-real-time) internal-time-units-per-second))
+                  (/ (float (get-internal-real-time) 1d0)
+                     (float internal-time-units-per-second 1d0)))
               :to-be t)))
 
   (it "uses CL:SLEEP for the default sleeper"
